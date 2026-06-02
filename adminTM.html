@@ -1393,7 +1393,7 @@ async function uploadSinglePut(file, endpoint, encodedKey, objectKey, progressFi
   var uploadUrl = endpoint + '/' + R2_CONFIG.bucket + '/' + encodedKey;
   var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
   var headers = {
-    'Content-Type': file.type || 'application/octet-stream',
+   'Content-Type': file.type || 'video/mp4',
     'Host': new URL(endpoint).host,
     'X-Amz-Date': dateTime,
     'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
@@ -1438,7 +1438,7 @@ async function uploadMultipart(file, endpoint, encodedKey, objectKey, progressFi
     if (progressText) progressText.textContent = pct + '%';
   }
   if (progressText) progressText.textContent = 'Starting multipart upload...';
-  var uploadId = await initiateMultipart(bucketUrl);
+ var uploadId = await initiateMultipart(bucketUrl, file);
   console.log('Multipart initiated. UploadId:', uploadId, 'Parts:', totalParts);
   try {
     var partQueue = [];
@@ -1477,10 +1477,20 @@ async function uploadMultipart(file, endpoint, encodedKey, objectKey, progressFi
   }
 }
 
-async function initiateMultipart(bucketUrl) {
+async function initiateMultipart(bucketUrl, file) {
   var url = bucketUrl + '?uploads';
   var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
-  var headers = { 'Host': new URL(url).host, 'X-Amz-Date': dateTime, 'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD' };
+  
+  // ✅ FIX: Force video/mp4 if the browser doesn't detect the type
+  var contentType = file.type || 'video/mp4';
+  
+  var headers = {
+    'Content-Type': contentType, // ✅ FIX: Add this line!
+    'Host': new URL(url).host,
+    'X-Amz-Date': dateTime,
+    'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
+  };
+  
   headers['Authorization'] = await signV4('POST', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
   var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
   var response = await fetch(url, { method: 'POST', headers: fetchHeaders });
