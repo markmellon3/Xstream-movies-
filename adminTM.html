@@ -1264,8 +1264,8 @@ firebase.initializeApp(firebaseConfig);
 var auth = firebase.auth();
 var db = firebase.database();
 
-/* Firebase path for translated videos */
-var FB_PATH = "description/Translated";
+/* Firebase path — data is saved directly under "Translated/" */
+var FB_PATH = "Translated";
 
 /* =============================================
    Cloudflare R2 Configuration
@@ -1297,9 +1297,9 @@ var state = {
 /* =============================================
    Utility & Toast
    ============================================= */
-function esc(s) { if(!s)return""; var d=document.createElement("div"); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
-function fmtNum(n) { n=parseInt(n)||0; if(n>=1e6)return(n/1e6).toFixed(1)+"M"; if(n>=1e3)return(n/1e3).toFixed(1)+"K"; return n.toString(); }
-function fmtDate(ts) { if(!ts)return"—"; return new Date(ts).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}); }
+function esc(s) { if (!s) return ""; var d = document.createElement("div"); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
+function fmtNum(n) { n = parseInt(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(1) + "M"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "K"; return n.toString(); }
+function fmtDate(ts) { if (!ts) return "—"; return new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }); }
 function fmtTime(ms) {
   if (ms < 1000) return ms + "ms";
   if (ms < 60000) return (ms / 1000).toFixed(1) + "s";
@@ -1313,75 +1313,41 @@ function fmtBytes(bytes) {
   if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB";
   return (bytes / 1073741824).toFixed(2) + " GB";
 }
-function getThumb(v) { if(v.thumbnailUrl&&v.thumbnailUrl.length>10)return v.thumbnailUrl; var t=v.title||"Video"; var h=(t.charCodeAt(0)*37+(t.charCodeAt(1)||0)*53)%360; return "https://placehold.co/640x360/"+h.toString(16).padStart(3,"0")+"222/ffffff?text="+encodeURIComponent(t.substring(0,15)); }
+function getThumb(v) {
+  if (v.thumbnailUrl && v.thumbnailUrl.length > 10) return v.thumbnailUrl;
+  var t = v.title || "Video";
+  var h = (t.charCodeAt(0) * 37 + (t.charCodeAt(1) || 0) * 53) % 360;
+  return "https://placehold.co/640x360/" + h.toString(16).padStart(3, "0") + "222/ffffff?text=" + encodeURIComponent(t.substring(0, 15));
+}
 function parseError(err) {
   if (!err) return "Unknown error";
   if (err && err.message && typeof err.message === 'string' && err.message.length > 0) return err.message;
   if (typeof err === 'string' && err.length > 0) return err;
-  try { var s = JSON.stringify(err); if (s && s !== '{}') return s; } catch(e) {}
+  try { var s = JSON.stringify(err); if (s && s !== '{}') return s; } catch (e) {}
   return String(err);
 }
 
 function showToast(msg, type) {
-  type=type||"info"; var c=document.getElementById("toast-container"); if(!c)return;
-  var icons={success:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',error:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',warning:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'};
-  var t=document.createElement("div"); t.className="toast "+type;
-  t.innerHTML='<span class="toast-icon">'+(icons[type]||icons.info)+'</span><span class="toast-msg">'+msg+'</span><button class="toast-close">&times;</button>';
-  c.appendChild(t); t.querySelector(".toast-close").onclick=function(){removeToast(t);}; setTimeout(function(){removeToast(t);},5000);
+  type = type || "info";
+  var c = document.getElementById("toast-container");
+  if (!c) return;
+  var icons = {
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+  };
+  var t = document.createElement("div");
+  t.className = "toast " + type;
+  t.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span><span class="toast-msg">' + msg + '</span><button class="toast-close">&times;</button>';
+  c.appendChild(t);
+  t.querySelector(".toast-close").onclick = function () { removeToast(t); };
+  setTimeout(function () { removeToast(t); }, 5000);
 }
-function removeToast(t) { if(t.classList.contains("removing"))return; t.classList.add("removing"); setTimeout(function(){t.remove();},300); }
-
-/* =============================================
-   Path Cleanup — Prevents stray nodes in description/
-   
-   PROBLEM: When writing to "description/Translated", Firebase can
-   create empty sibling nodes directly under "description/" — either
-   from a previous buggy write, offline persistence sync, or an old
-   code version that used a different path.
-   
-   SOLUTION: After every write operation AND on app startup, scan
-   the "description/" node and delete anything that is NOT "Translated".
-   This guarantees the only child of "description/" is "Translated/".
-   ============================================= */
-function cleanupDescriptionPath() {
-  db.ref("description").once("value").then(function(snap) {
-    if (!snap.exists()) return;
-
-    var straysFound = [];
-    var removeOps = [];
-
-    snap.forEach(function(child) {
-      /*
-       * Only "Translated" is allowed as a direct child of "description/".
-       * Everything else is a stray node that must be removed.
-       */
-      if (child.key !== "Translated") {
-        straysFound.push(child.key);
-        removeOps.push(child.ref.remove());
-      }
-    });
-
-    if (straysFound.length > 0) {
-      console.log("[Path Cleanup] Found stray nodes under description/: " + straysFound.join(", "));
-      Promise.all(removeOps).then(function() {
-        console.log("[Path Cleanup] Removed " + straysFound.length + " stray node(s) from description/");
-      }).catch(function(err) {
-        console.warn("[Path Cleanup] Some stray nodes could not be removed:", err);
-      });
-    }
-
-    /*
-     * Also check: if "description/" itself has a primitive value
-     * (string, number, boolean) instead of being an object, that means
-     * someone did db.ref("description").set(value) which would
-     * DESTROY the Translated child. Log a warning.
-     */
-    if (snap.val() !== null && typeof snap.val() !== "object") {
-      console.error("[Path Cleanup] WARNING: 'description/' has a primitive value instead of being an object. This could mean 'Translated/' data was overwritten!");
-    }
-  }).catch(function(err) {
-    console.warn("[Path Cleanup] Could not scan description/ path:", err);
-  });
+function removeToast(t) {
+  if (t.classList.contains("removing")) return;
+  t.classList.add("removing");
+  setTimeout(function () { t.remove(); }, 300);
 }
 
 /* =============================================
@@ -1401,7 +1367,7 @@ async function hmacSha256(key, message) {
 async function sha256Hex(data) {
   if (typeof data === 'string') data = new TextEncoder().encode(data);
   var hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+  return Array.from(new Uint8Array(hash)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
 }
 
 async function signV4(method, url, headers, payloadHash, dateTime) {
@@ -1409,10 +1375,10 @@ async function signV4(method, url, headers, payloadHash, dateTime) {
   var parsedUrl = new URL(url);
   var canonicalUri = parsedUrl.pathname;
   var canonicalQuerystring = parsedUrl.searchParams.toString();
-  var headerKeys = Object.keys(headers).map(function(k) { return k.toLowerCase(); }).sort();
+  var headerKeys = Object.keys(headers).map(function (k) { return k.toLowerCase(); }).sort();
   var signedHeaders = headerKeys.join(';');
-  var canonicalHeaders = headerKeys.map(function(k) {
-    var originalKey = Object.keys(headers).find(function(h) { return h.toLowerCase() === k; });
+  var canonicalHeaders = headerKeys.map(function (k) {
+    var originalKey = Object.keys(headers).find(function (h) { return h.toLowerCase() === k; });
     var val = headers[originalKey];
     if (val === null || val === undefined) val = '';
     return k + ':' + String(val).trim() + '\n';
@@ -1425,17 +1391,17 @@ async function signV4(method, url, headers, payloadHash, dateTime) {
   var kService = await hmacSha256(kRegion, 's3');
   var kSigning = await hmacSha256(kService, 'aws4_request');
   var sigBuffer = await hmacSha256(kSigning, stringToSign);
-  var signature = Array.from(new Uint8Array(sigBuffer)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+  var signature = Array.from(new Uint8Array(sigBuffer)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
   return 'AWS4-HMAC-SHA256 Credential=' + R2_CONFIG.accessKeyId + '/' + credentialScope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
 }
 
 /* =============================================
-   Cloudflare R2 Upload — Upgraded Multipart
+   Cloudflare R2 Upload — Multipart Support
    ============================================= */
 var MULTIPART_THRESHOLD = 500 * 1024 * 1024;
-var CHUNK_SIZE          = 32  * 1024 * 1024;
+var CHUNK_SIZE = 32 * 1024 * 1024;
 var MAX_PARALLEL_UPLOADS = 5;
-var PART_RETRY_ATTEMPTS  = 3;
+var PART_RETRY_ATTEMPTS = 3;
 var PART_RETRY_BASE_DELAY = 1000;
 
 function createProgressTracker(totalBytes, progressFill, progressText) {
@@ -1467,10 +1433,10 @@ function createProgressTracker(totalBytes, progressFill, progressText) {
   function setError(msg) {
     if (progressText) progressText.textContent = 'Error: ' + msg;
   }
-  return { update: update, finish: finish, setVerifying: setVerifying, setError: setError, getCompleted: function() { return completedBytes; } };
+  return { update: update, finish: finish, setVerifying: setVerifying, setError: setError, getCompleted: function () { return completedBytes; } };
 }
 
-function sleep(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); }
+function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
 async function uploadToR2(file, type, fillId, pctId) {
   if (!file) throw new Error('No file provided');
@@ -1482,7 +1448,7 @@ async function uploadToR2(file, type, fillId, pctId) {
   var safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   var objectKey = folder + '/' + Date.now() + '_' + safeName;
   var endpoint = 'https://' + R2_CONFIG.accountId + '.r2.cloudflarestorage.com';
-  var encodedKey = objectKey.split('/').map(function(part) { return encodeURIComponent(part); }).join('/');
+  var encodedKey = objectKey.split('/').map(function (part) { return encodeURIComponent(part); }).join('/');
   var publicUrl = R2_CONFIG.publicUrl + '/' + encodedKey;
   var tracker = createProgressTracker(file.size, progressFill, progressText);
   var uploadStartTime = Date.now();
@@ -1521,7 +1487,7 @@ async function uploadSinglePut(file, endpoint, encodedKey, tracker) {
     'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
   };
   headers['Authorization'] = await signV4('PUT', uploadUrl, headers, 'UNSIGNED-PAYLOAD', dateTime);
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     var xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl, true);
     var hKeys = Object.keys(headers);
@@ -1529,7 +1495,7 @@ async function uploadSinglePut(file, endpoint, encodedKey, tracker) {
       if (hKeys[i].toLowerCase() !== 'host') xhr.setRequestHeader(hKeys[i], headers[hKeys[i]]);
     }
     var lastReportedPct = -1;
-    xhr.upload.onprogress = function(e) {
+    xhr.upload.onprogress = function (e) {
       if (e.lengthComputable) {
         var pct = Math.round((e.loaded / e.total) * 100);
         if (pct !== lastReportedPct) {
@@ -1538,7 +1504,7 @@ async function uploadSinglePut(file, endpoint, encodedKey, tracker) {
         }
       }
     };
-    xhr.onload = function() {
+    xhr.onload = function () {
       if (xhr.status >= 200 && xhr.status < 300) {
         if (tracker.getCompleted() < file.size) {
           tracker.update(file.size - tracker.getCompleted());
@@ -1548,8 +1514,8 @@ async function uploadSinglePut(file, endpoint, encodedKey, tracker) {
         reject(new Error(extractR2Error(xhr, 'Single PUT upload failed')));
       }
     };
-    xhr.onerror = function() { reject(new Error('Network/CORS error during single PUT upload')); };
-    xhr.ontimeout = function() { reject(new Error('Upload timed out')); };
+    xhr.onerror = function () { reject(new Error('Network/CORS error during single PUT upload')); };
+    xhr.ontimeout = function () { reject(new Error('Upload timed out')); };
     xhr.timeout = 0;
     xhr.send(file);
   });
@@ -1567,7 +1533,7 @@ async function uploadMultipart(file, endpoint, encodedKey, objectKey, tracker) {
     var partNumbers = [];
     for (var i = 1; i <= totalParts; i++) { partNumbers.push(i); }
     var results = await uploadPartsWithPool(file, bucketUrl, uploadId, partNumbers, totalSize, tracker);
-    results.sort(function(a, b) { return a.partNumber - b.partNumber; });
+    results.sort(function (a, b) { return a.partNumber - b.partNumber; });
     parts = results;
     if (tracker.getCompleted() < totalSize) {
       tracker.update(totalSize - tracker.getCompleted());
@@ -1599,12 +1565,12 @@ async function uploadPartsWithPool(file, bucketUrl, uploadId, partNumbers, total
     var partNum = partNumbers[queueIndex];
     queueIndex++;
     activeCount++;
-    uploadPartWithRetry(file, bucketUrl, uploadId, partNum, totalSize, tracker).then(function(result) {
+    uploadPartWithRetry(file, bucketUrl, uploadId, partNum, totalSize, tracker).then(function (result) {
       activeCount--;
       results.push(result);
       if (pendingResolvers.length > 0) { var r = pendingResolvers.shift(); r(); }
       tryStartNext();
-    }).catch(function(err) {
+    }).catch(function (err) {
       activeCount--;
       hasError = true;
       errorResult = err;
@@ -1616,7 +1582,7 @@ async function uploadPartsWithPool(file, bucketUrl, uploadId, partNumbers, total
   for (var b = 0; b < initialBatch; b++) { tryStartNext(); }
   while (results.length < partNumbers.length && !hasError) {
     if (queueIndex >= partNumbers.length && activeCount === 0) break;
-    await new Promise(function(resolve) { pendingResolvers.push(resolve); });
+    await new Promise(function (resolve) { pendingResolvers.push(resolve); });
   }
   if (hasError) throw errorResult;
   if (results.length !== partNumbers.length) {
@@ -1652,7 +1618,7 @@ async function uploadPartWithRetry(file, bucketUrl, uploadId, partNumber, totalS
 }
 
 function doUploadPart(file, bucketUrl, uploadId, partNumber, start, end, chunkSize) {
-  return new Promise(async function(resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     try {
       var chunkBlob = file.slice(start, end);
       var url = bucketUrl + '?partNumber=' + partNumber + '&uploadId=' + encodeURIComponent(uploadId);
@@ -1669,7 +1635,7 @@ function doUploadPart(file, bucketUrl, uploadId, partNumber, start, end, chunkSi
       for (var i = 0; i < hKeys.length; i++) {
         if (hKeys[i].toLowerCase() !== 'host') xhr.setRequestHeader(hKeys[i], headers[hKeys[i]]);
       }
-      xhr.onload = function() {
+      xhr.onload = function () {
         if (xhr.status >= 200 && xhr.status < 300) {
           var etag = xhr.getResponseHeader('ETag');
           if (!etag) {
@@ -1682,8 +1648,8 @@ function doUploadPart(file, bucketUrl, uploadId, partNumber, start, end, chunkSi
           reject(new Error('Part ' + partNumber + ' upload failed (HTTP ' + xhr.status + ')'));
         }
       };
-      xhr.onerror = function() { reject(new Error('Network error uploading part ' + partNumber)); };
-      xhr.ontimeout = function() { reject(new Error('Timeout uploading part ' + partNumber)); };
+      xhr.onerror = function () { reject(new Error('Network error uploading part ' + partNumber)); };
+      xhr.ontimeout = function () { reject(new Error('Timeout uploading part ' + partNumber)); };
       xhr.timeout = 120000;
       xhr.send(chunkBlob);
     } catch (err) { reject(err); }
@@ -1701,7 +1667,7 @@ async function initiateMultipart(bucketUrl, file) {
     'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
   };
   headers['Authorization'] = await signV4('POST', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
-  var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
+  var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function (h) { return h[0].toLowerCase() !== 'host'; }));
   var response = await fetch(url, { method: 'POST', headers: fetchHeaders });
   if (!response.ok) {
     var errText = await response.text();
@@ -1718,7 +1684,7 @@ async function initiateMultipart(bucketUrl, file) {
 async function completeMultipart(bucketUrl, uploadId, parts) {
   var url = bucketUrl + '?uploadId=' + encodeURIComponent(uploadId);
   var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
-  var xmlParts = parts.map(function(p) {
+  var xmlParts = parts.map(function (p) {
     return '<Part><PartNumber>' + p.partNumber + '</PartNumber><ETag>"' + p.etag + '"</ETag></Part>';
   }).join('');
   var xmlBody = '<CompleteMultipartUpload>' + xmlParts + '</CompleteMultipartUpload>';
@@ -1730,7 +1696,7 @@ async function completeMultipart(bucketUrl, uploadId, parts) {
     'X-Amz-Content-Sha256': bodyHash
   };
   headers['Authorization'] = await signV4('POST', url, headers, bodyHash, dateTime);
-  var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
+  var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function (h) { return h[0].toLowerCase() !== 'host'; }));
   fetchHeaders['Content-Type'] = 'application/xml';
   var response = await fetch(url, { method: 'POST', headers: fetchHeaders, body: xmlBody });
   if (!response.ok) {
@@ -1750,7 +1716,7 @@ async function abortMultipart(bucketUrl, uploadId) {
       'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
     };
     headers['Authorization'] = await signV4('DELETE', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
-    var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
+    var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function (h) { return h[0].toLowerCase() !== 'host'; }));
     await fetch(url, { method: 'DELETE', headers: fetchHeaders });
     console.log('[Multipart] Upload aborted successfully');
   } catch (e) {
@@ -1843,7 +1809,7 @@ async function testR2() {
     headers['Authorization'] = await signV4('PUT', uploadUrl, headers, 'UNSIGNED-PAYLOAD', dateTime);
     var response = await fetch(uploadUrl, {
       method: 'PUT',
-      headers: Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; })),
+      headers: Object.fromEntries(Object.entries(headers).filter(function (h) { return h[0].toLowerCase() !== 'host'; })),
       body: testFile
     });
     if (response.ok) {
@@ -1878,85 +1844,85 @@ async function testR2() {
    ============================================= */
 var omdbCache = {};
 function fetchOmdb(title) {
-  if(!title||title.length<2)return Promise.resolve(null);
-  var key=title.toLowerCase().trim();
-  if(omdbCache[key])return Promise.resolve(omdbCache[key]);
-  return fetch(OMDB_URL+"?t="+encodeURIComponent(title)+"&apikey="+OMDB_KEY+"&type=movie&plot=full")
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(d.Response==="True"){
-        var res={
-          poster:d.Poster!=="N/A"?d.Poster:null,
-          year:d.Year||"",genre:d.Genre||"",rated:d.Rated||"",
-          imdbRating:d.imdbRating||"",runtime:d.Runtime||"",
-          director:d.Director||"",plot:d.Plot||"",country:d.Country||""
+  if (!title || title.length < 2) return Promise.resolve(null);
+  var key = title.toLowerCase().trim();
+  if (omdbCache[key]) return Promise.resolve(omdbCache[key]);
+  return fetch(OMDB_URL + "?t=" + encodeURIComponent(title) + "&apikey=" + OMDB_KEY + "&type=movie&plot=full")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.Response === "True") {
+        var res = {
+          poster: d.Poster !== "N/A" ? d.Poster : null,
+          year: d.Year || "", genre: d.Genre || "", rated: d.Rated || "",
+          imdbRating: d.imdbRating || "", runtime: d.Runtime || "",
+          director: d.Director || "", plot: d.Plot || "", country: d.Country || ""
         };
-        omdbCache[key]=res;
+        omdbCache[key] = res;
         return res;
       }
       return null;
     })
-    .catch(function(){return null;});
+    .catch(function () { return null; });
 }
 
 /* =============================================
    Auth & Layout
    ============================================= */
-function showAuthGuard(){
-  document.getElementById("auth-guard").style.display="flex";
-  document.getElementById("admin-layout").style.display="none";
-  document.getElementById("login-box").style.display="block";
-  document.getElementById("access-denied").style.display="none";
+function showAuthGuard() {
+  document.getElementById("auth-guard").style.display = "flex";
+  document.getElementById("admin-layout").style.display = "none";
+  document.getElementById("login-box").style.display = "block";
+  document.getElementById("access-denied").style.display = "none";
 }
-function showAccessDenied(){
-  document.getElementById("auth-guard").style.display="flex";
-  document.getElementById("admin-layout").style.display="none";
-  document.getElementById("login-box").style.display="none";
-  document.getElementById("access-denied").style.display="block";
+function showAccessDenied() {
+  document.getElementById("auth-guard").style.display = "flex";
+  document.getElementById("admin-layout").style.display = "none";
+  document.getElementById("login-box").style.display = "none";
+  document.getElementById("access-denied").style.display = "block";
 }
-function showAdminLayout(){
-  document.getElementById("auth-guard").style.display="none";
-  document.getElementById("admin-layout").style.display="block";
-  var u=state.user;
-  var a=document.getElementById("admin-avatar");
-  var n=document.getElementById("admin-name");
-  var e=document.getElementById("admin-email");
-  if(a)a.textContent=(u.displayName||u.email||"A")[0].toUpperCase();
-  if(n)n.textContent=u.displayName||"Admin";
-  if(e)e.textContent=u.email||"";
-  var note=document.getElementById("auth-uid-note");
-  if(note)note.textContent="Admin UID: "+ADMIN_UID;
+function showAdminLayout() {
+  document.getElementById("auth-guard").style.display = "none";
+  document.getElementById("admin-layout").style.display = "block";
+  var u = state.user;
+  var a = document.getElementById("admin-avatar");
+  var n = document.getElementById("admin-name");
+  var e = document.getElementById("admin-email");
+  if (a) a.textContent = (u.displayName || u.email || "A")[0].toUpperCase();
+  if (n) n.textContent = u.displayName || "Admin";
+  if (e) e.textContent = u.email || "";
+  var note = document.getElementById("auth-uid-note");
+  if (note) note.textContent = "Admin UID: " + ADMIN_UID;
 }
 
 /* =============================================
    Navigation
    ============================================= */
-var viewTitles={dashboard:"Dashboard",upload:"Add Translation",movies:"Manage Translations"};
-function navigateTo(view){
-  state.currentView=view;
-  document.querySelectorAll(".nav-item").forEach(function(n){n.classList.toggle("active",n.dataset.view===view);});
-  document.querySelectorAll(".view").forEach(function(v){v.classList.remove("active");});
-  var t=document.getElementById("view-"+view);
-  if(t)t.classList.add("active");
-  document.getElementById("page-title").textContent=viewTitles[view]||"Admin";
+var viewTitles = { dashboard: "Dashboard", upload: "Add Translation", movies: "Manage Translations" };
+function navigateTo(view) {
+  state.currentView = view;
+  document.querySelectorAll(".nav-item").forEach(function (n) { n.classList.toggle("active", n.dataset.view === view); });
+  document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+  var t = document.getElementById("view-" + view);
+  if (t) t.classList.add("active");
+  document.getElementById("page-title").textContent = viewTitles[view] || "Admin";
   updateHeaderActions(view);
   closeSidebar();
-  if(view==="dashboard")loadDashboard();
-  else if(view==="movies")loadMovies();
+  if (view === "dashboard") loadDashboard();
+  else if (view === "movies") loadMovies();
 }
-function updateHeaderActions(view){
-  var el=document.getElementById("header-actions");
-  if(view==="dashboard"){
-    el.innerHTML='<button class="btn-header" id="btn-refresh-dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh</button>';
-    document.getElementById("btn-refresh-dash").onclick=loadDashboard;
-  }else if(view==="movies"){
-    el.innerHTML='<button class="btn-header btn-header-accent" id="btn-add-movie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Translation</button>';
-    document.getElementById("btn-add-movie").onclick=function(){navigateTo("upload");};
-  }else{
-    el.innerHTML="";
+function updateHeaderActions(view) {
+  var el = document.getElementById("header-actions");
+  if (view === "dashboard") {
+    el.innerHTML = '<button class="btn-header" id="btn-refresh-dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh</button>';
+    document.getElementById("btn-refresh-dash").onclick = loadDashboard;
+  } else if (view === "movies") {
+    el.innerHTML = '<button class="btn-header btn-header-accent" id="btn-add-movie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Translation</button>';
+    document.getElementById("btn-add-movie").onclick = function () { navigateTo("upload"); };
+  } else {
+    el.innerHTML = "";
   }
 }
-function closeSidebar(){
+function closeSidebar() {
   document.getElementById("sidebar").classList.remove("open");
   document.getElementById("sidebar-backdrop").classList.remove("active");
 }
@@ -1964,95 +1930,95 @@ function closeSidebar(){
 /* =============================================
    Dashboard
    ============================================= */
-function loadDashboard(){
-  db.ref(FB_PATH).once("value").then(function(snap){
-    var videos=[];
-    snap.forEach(function(c){var d=c.val();d._id=c.key;videos.push(d);});
-    var tv=0,tl=0,cs={};
-    videos.forEach(function(v){tv+=(v.views||0);tl+=(v.likes||0);if(v.vjName)cs[v.vjName]=true;});
-    document.getElementById("stat-total").textContent=videos.length;
-    document.getElementById("stat-views").textContent=fmtNum(tv);
-    document.getElementById("stat-likes").textContent=fmtNum(tl);
-    document.getElementById("stat-cats").textContent=Object.keys(cs).length;
+function loadDashboard() {
+  db.ref(FB_PATH).once("value").then(function (snap) {
+    var videos = [];
+    snap.forEach(function (c) { var d = c.val(); d._id = c.key; videos.push(d); });
+    var tv = 0, tl = 0, cs = {};
+    videos.forEach(function (v) { tv += (v.views || 0); tl += (v.likes || 0); if (v.vjName) cs[v.vjName] = true; });
+    document.getElementById("stat-total").textContent = videos.length;
+    document.getElementById("stat-views").textContent = fmtNum(tv);
+    document.getElementById("stat-likes").textContent = fmtNum(tl);
+    document.getElementById("stat-cats").textContent = Object.keys(cs).length;
     renderCategoryChart(videos);
     renderTopMovies(videos);
     renderRecentUploads(videos);
-  }).catch(function(e){showToast("Failed to load dashboard","error");});
+  }).catch(function (e) { showToast("Failed to load dashboard", "error"); });
 }
-function renderCategoryChart(v){
-  var el=document.getElementById("category-chart");
-  var c={};
-  v.forEach(function(x){var cat=x.vjName||"Uncategorized";c[cat]=(c[cat]||0)+1;});
-  var s=Object.entries(c).sort(function(a,b){return b[1]-a[1];});
-  if(s.length===0){el.innerHTML='<div class="cat-empty">No translations yet</div>';return;}
-  var m=s[0][1],h="";
-  s.slice(0,9).forEach(function(x){
-    var p=Math.max(8,(x[1]/m)*100);
-    h+='<div class="cat-bar-row"><span class="cat-bar-label" title="'+esc(x[0])+'">'+esc(x[0].replace("vj-","VJ "))+'</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:'+p+'%">'+x[1]+'</div></div></div>';
+function renderCategoryChart(v) {
+  var el = document.getElementById("category-chart");
+  var c = {};
+  v.forEach(function (x) { var cat = x.vjName || "Uncategorized"; c[cat] = (c[cat] || 0) + 1; });
+  var s = Object.entries(c).sort(function (a, b) { return b[1] - a[1]; });
+  if (s.length === 0) { el.innerHTML = '<div class="cat-empty">No translations yet</div>'; return; }
+  var m = s[0][1], h = "";
+  s.slice(0, 9).forEach(function (x) {
+    var p = Math.max(8, (x[1] / m) * 100);
+    h += '<div class="cat-bar-row"><span class="cat-bar-label" title="' + esc(x[0]) + '">' + esc(x[0].replace("vj-", "VJ ")) + '</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:' + p + '%">' + x[1] + '</div></div></div>';
   });
-  el.innerHTML=h;
+  el.innerHTML = h;
 }
-function renderTopMovies(v){
-  var el=document.getElementById("top-movies");
-  var s=v.slice().sort(function(a,b){return(b.views||0)-(a.views||0);}).slice(0,5);
-  if(s.length===0){el.innerHTML='<div class="cat-empty">No translations yet</div>';return;}
-  var h="";
-  s.forEach(function(x,i){
-    h+='<div class="top-item"><span class="top-rank">'+(i+1)+'</span><img class="top-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/48x32/e63946/fff?text=?\'"><div class="top-info"><div class="top-title" title="'+esc(x.title)+'">'+esc(x.title)+'</div><div class="top-views">'+fmtNum(x.views||0)+' views</div></div></div>';
+function renderTopMovies(v) {
+  var el = document.getElementById("top-movies");
+  var s = v.slice().sort(function (a, b) { return (b.views || 0) - (a.views || 0); }).slice(0, 5);
+  if (s.length === 0) { el.innerHTML = '<div class="cat-empty">No translations yet</div>'; return; }
+  var h = "";
+  s.forEach(function (x, i) {
+    h += '<div class="top-item"><span class="top-rank">' + (i + 1) + '</span><img class="top-thumb" src="' + getThumb(x) + '" alt="" onerror="this.src=\'https://placehold.co/48x32/e63946/fff?text=?\'"><div class="top-info"><div class="top-title" title="' + esc(x.title) + '">' + esc(x.title) + '</div><div class="top-views">' + fmtNum(x.views || 0) + ' views</div></div></div>';
   });
-  el.innerHTML=h;
+  el.innerHTML = h;
 }
-function renderRecentUploads(v){
-  var el=document.getElementById("recent-uploads");
-  var s=v.slice().sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);}).slice(0,8);
-  if(s.length===0){el.innerHTML='<div class="recent-empty">No translations uploaded yet.</div>';return;}
-  var h='<table class="recent-table"><thead><tr><th>Thumb</th><th>Title</th><th>VJ</th><th>Views</th><th>Likes</th><th>Added</th></tr></thead><tbody>';
-  s.forEach(function(x){
-    h+='<tr><td><img class="recent-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/50x32/e63946/fff?text=?\'"></td><td class="recent-title" title="'+esc(x.title)+'">'+esc(x.title)+'</td><td><span class="recent-cat">'+esc((x.vjName||"\u2014").replace("vj-","VJ "))+'</span></td><td>'+fmtNum(x.views||0)+'</td><td>'+fmtNum(x.likes||0)+'</td><td class="tbl-date">'+fmtDate(x.createdAt)+'</td></tr>';
+function renderRecentUploads(v) {
+  var el = document.getElementById("recent-uploads");
+  var s = v.slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 8);
+  if (s.length === 0) { el.innerHTML = '<div class="recent-empty">No translations uploaded yet.</div>'; return; }
+  var h = '<table class="recent-table"><thead><tr><th>Thumb</th><th>Title</th><th>VJ</th><th>Views</th><th>Likes</th><th>Added</th></tr></thead><tbody>';
+  s.forEach(function (x) {
+    h += '<tr><td><img class="recent-thumb" src="' + getThumb(x) + '" alt="" onerror="this.src=\'https://placehold.co/50x32/e63946/fff?text=?\'"></td><td class="recent-title" title="' + esc(x.title) + '">' + esc(x.title) + '</td><td><span class="recent-cat">' + esc((x.vjName || "\u2014").replace("vj-", "VJ ")) + '</span></td><td>' + fmtNum(x.views || 0) + '</td><td>' + fmtNum(x.likes || 0) + '</td><td class="tbl-date">' + fmtDate(x.createdAt) + '</td></tr>';
   });
-  h+='</tbody></table>';
-  el.innerHTML=h;
+  h += '</tbody></table>';
+  el.innerHTML = h;
 }
 
 /* =============================================
    Upload View Logic
    ============================================= */
-function initUploadView(){
-  var dz=document.getElementById("video-dropzone"),
-      fi=document.getElementById("video-file-input"),
-      rb=document.getElementById("remove-video"),
-      ti=document.getElementById("up-title"),
-      di=document.getElementById("up-desc"),
-      tb=document.getElementById("btn-upload-thumb"),
-      tfi=document.getElementById("thumb-file-input"),
-      sb=document.getElementById("upload-submit");
+function initUploadView() {
+  var dz = document.getElementById("video-dropzone"),
+    fi = document.getElementById("video-file-input"),
+    rb = document.getElementById("remove-video"),
+    ti = document.getElementById("up-title"),
+    di = document.getElementById("up-desc"),
+    tb = document.getElementById("btn-upload-thumb"),
+    tfi = document.getElementById("thumb-file-input"),
+    sb = document.getElementById("upload-submit");
 
-  dz.addEventListener("click",function(e){
-    if(e.target.closest(".dropzone-remove"))return;
+  dz.addEventListener("click", function (e) {
+    if (e.target.closest(".dropzone-remove")) return;
     fi.click();
   });
-  dz.addEventListener("dragover",function(e){e.preventDefault();dz.classList.add("dragover");});
-  dz.addEventListener("dragleave",function(){dz.classList.remove("dragover");});
-  dz.addEventListener("drop",function(e){
-    e.preventDefault();dz.classList.remove("dragover");
-    var f=e.dataTransfer.files[0];
-    if(f&&f.type.startsWith("video/"))hvf(f);
-    else showToast("Please drop a valid video file","warning");
+  dz.addEventListener("dragover", function (e) { e.preventDefault(); dz.classList.add("dragover"); });
+  dz.addEventListener("dragleave", function () { dz.classList.remove("dragover"); });
+  dz.addEventListener("drop", function (e) {
+    e.preventDefault(); dz.classList.remove("dragover");
+    var f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith("video/")) hvf(f);
+    else showToast("Please drop a valid video file", "warning");
   });
-  fi.addEventListener("change",function(){if(fi.files[0])hvf(fi.files[0]);});
+  fi.addEventListener("change", function () { if (fi.files[0]) hvf(fi.files[0]); });
 
-  function hvf(file){
-    if(file.size>5*1024*1024*1024){showToast("Video must be under 5GB","error");return;}
-    state.videoFile=file;state.uploadedVideoUrl="";
+  function hvf(file) {
+    if (file.size > 5 * 1024 * 1024 * 1024) { showToast("Video must be under 5GB", "error"); return; }
+    state.videoFile = file; state.uploadedVideoUrl = "";
     dz.classList.add("has-file");
-    var pv=document.getElementById("video-preview");
-    pv.style.display="block";
-    pv.innerHTML='<video src="'+URL.createObjectURL(file)+'" controls style="max-width:100%;max-height:200px;border-radius:6px"></video>';
-    var ne=document.getElementById("video-file-name");
-    ne.style.display="flex";
-    var sz=file.size>=1073741824?(file.size/1073741824).toFixed(2)+' GB':(file.size/(1024*1024)).toFixed(1)+' MB';
-    ne.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> '+esc(file.name)+' ('+sz+')';
-    rb.style.display="flex";
+    var pv = document.getElementById("video-preview");
+    pv.style.display = "block";
+    pv.innerHTML = '<video src="' + URL.createObjectURL(file) + '" controls style="max-width:100%;max-height:200px;border-radius:6px"></video>';
+    var ne = document.getElementById("video-file-name");
+    ne.style.display = "flex";
+    var sz = file.size >= 1073741824 ? (file.size / 1073741824).toFixed(2) + ' GB' : (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+    ne.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> ' + esc(file.name) + ' (' + sz + ')';
+    rb.style.display = "flex";
     var hint = document.getElementById("video-upload-hint");
     if (hint) {
       if (file.size >= MULTIPART_THRESHOLD) {
@@ -2066,49 +2032,47 @@ function initUploadView(){
     }
   }
 
-  rb.addEventListener("click",function(e){
+  rb.addEventListener("click", function (e) {
     e.stopPropagation();
-    state.videoFile=null;state.uploadedVideoUrl="";
+    state.videoFile = null; state.uploadedVideoUrl = "";
     dz.classList.remove("has-file");
-    document.getElementById("video-preview").style.display="none";
-    document.getElementById("video-preview").innerHTML="";
-    document.getElementById("video-file-name").style.display="none";
-    document.getElementById("video-progress").style.display="none";
-    rb.style.display="none";
-    fi.value="";
+    document.getElementById("video-preview").style.display = "none";
+    document.getElementById("video-preview").innerHTML = "";
+    document.getElementById("video-file-name").style.display = "none";
+    document.getElementById("video-progress").style.display = "none";
+    rb.style.display = "none";
+    fi.value = "";
     var hint = document.getElementById("video-upload-hint");
     if (hint) hint.style.display = "none";
   });
 
-  tb.addEventListener("click",function(){tfi.click();});
-  tfi.addEventListener("change",function(){if(tfi.files[0])htf(tfi.files[0]);});
+  tb.addEventListener("click", function () { tfi.click(); });
+  tfi.addEventListener("change", function () { if (tfi.files[0]) htf(tfi.files[0]); });
 
-  function htf(file){
-    if(file.size>5*1024*1024){showToast("Thumbnail must be under 5MB","error");return;}
-    state.thumbFile=file;state.uploadedThumbUrl="";
-    var bx=document.getElementById("thumb-preview-box");
-    bx.innerHTML='<img src="'+URL.createObjectURL(file)+'" alt="Thumbnail preview">';
-    document.getElementById("thumb-progress").style.display="block";
+  function htf(file) {
+    if (file.size > 5 * 1024 * 1024) { showToast("Thumbnail must be under 5MB", "error"); return; }
+    state.thumbFile = file; state.uploadedThumbUrl = "";
+    var bx = document.getElementById("thumb-preview-box");
+    bx.innerHTML = '<img src="' + URL.createObjectURL(file) + '" alt="Thumbnail preview">';
+    document.getElementById("thumb-progress").style.display = "block";
   }
 
-   var ot = null;
-  ti.addEventListener("input", function() {
+  var ot = null;
+  ti.addEventListener("input", function () {
     document.getElementById("title-count").textContent = ti.value.length;
     clearTimeout(ot);
-    ot = setTimeout(function() {
+    ot = setTimeout(function () {
       var t = ti.value.trim();
       if (t.length >= 2) {
         var statusEl = document.getElementById("omdb-status");
         if (statusEl) statusEl.textContent = "Searching...";
-        fetchOmdb(t).then(function(d) {
+        fetchOmdb(t).then(function (d) {
           state.omdbData = d;
-          /* Re-grab after async — element may have been replaced */
           statusEl = document.getElementById("omdb-status");
           var indicatorEl = document.getElementById("omdb-indicator");
           var panelEl = document.getElementById("omdb-data-panel");
-          
+
           if (d) {
-            /* Only touch elements that actually exist in the DOM */
             var edYear = document.getElementById("up-year");
             var edGenre = document.getElementById("up-genre");
             var edRated = document.getElementById("up-rated");
@@ -2118,7 +2082,7 @@ function initUploadView(){
             var edDesc = document.getElementById("up-desc");
             var descCount = document.getElementById("desc-count");
             var edCountry = document.getElementById("up-country");
-            
+
             if (edYear) edYear.value = d.year || "";
             if (edGenre) edGenre.value = d.genre || "";
             if (edRated) edRated.value = d.rated || "";
@@ -2150,94 +2114,91 @@ function initUploadView(){
     }, 500);
   });
 
-  di.addEventListener("input",function(){document.getElementById("desc-count").textContent=di.value.length;});
+  di.addEventListener("input", function () { document.getElementById("desc-count").textContent = di.value.length; });
 
-  /* ── Submit: write ONLY to description/Translated, then cleanup ── */
-  sb.addEventListener("click",function(){
-    document.getElementById("up-desc-error").textContent="";
-    document.getElementById("up-vjname-error").textContent="";
-    var t=document.getElementById("up-title").value.trim(),
-        d=document.getElementById("up-desc").value.trim(),
-        vj=document.getElementById("up-vjname").value,
-        v=true;
-    if(!state.videoFile&&!state.uploadedVideoUrl){showToast("Please select a video file","warning");v=false;}
-    if(!t){showToast("Please enter a title","warning");v=false;}
-    if(!d){document.getElementById("up-desc-error").textContent="Required";v=false;}
-    if(!vj){document.getElementById("up-vjname-error").textContent="Please select a VJ";v=false;}
-    if(!v)return;
-    sb.classList.add("loading");sb.disabled=true;
+  /* ── Submit: write to Translated/<push-key> ── */
+  sb.addEventListener("click", function () {
+    document.getElementById("up-desc-error").textContent = "";
+    document.getElementById("up-vjname-error").textContent = "";
+    var t = document.getElementById("up-title").value.trim(),
+      d = document.getElementById("up-desc").value.trim(),
+      vj = document.getElementById("up-vjname").value,
+      v = true;
+    if (!state.videoFile && !state.uploadedVideoUrl) { showToast("Please select a video file", "warning"); v = false; }
+    if (!t) { showToast("Please enter a title", "warning"); v = false; }
+    if (!d) { document.getElementById("up-desc-error").textContent = "Required"; v = false; }
+    if (!vj) { document.getElementById("up-vjname-error").textContent = "Please select a VJ"; v = false; }
+    if (!v) return;
+    sb.classList.add("loading"); sb.disabled = true;
     var vp;
-    if(!state.uploadedVideoUrl&&state.videoFile){
-      document.getElementById("video-progress").style.display="block";
-      vp=handleUpload(state.videoFile,"video","video-fill","video-pct").then(function(u){state.uploadedVideoUrl=u;});
-    }else{vp=Promise.resolve();}
+    if (!state.uploadedVideoUrl && state.videoFile) {
+      document.getElementById("video-progress").style.display = "block";
+      vp = handleUpload(state.videoFile, "video", "video-fill", "video-pct").then(function (u) { state.uploadedVideoUrl = u; });
+    } else { vp = Promise.resolve(); }
     var tp;
-    if(state.thumbFile){
-      document.getElementById("thumb-progress").style.display="block";
-      tp=handleUpload(state.thumbFile,"image","thumb-fill","thumb-pct").then(function(u){state.uploadedThumbUrl=u;});
-    }else{tp=Promise.resolve();}
-    Promise.all([vp,tp]).then(function(){
-      var vd={
-        title:t,description:d,views:0,likes:0,dislikes:0,
-        videoUrl:state.uploadedVideoUrl,
-        thumbnailUrl:state.uploadedThumbUrl||"",
-        country:document.getElementById("up-country").value.trim()||"Unknown",
-        vjName:vj,userId:state.user.uid,createdAt:Date.now(),
-        year:document.getElementById("up-year").value.trim()||"",
-        genre:document.getElementById("up-genre").value.trim()||"",
-        rated:document.getElementById("up-rated").value.trim()||"",
-        imdbRating:document.getElementById("up-imdb").value.trim()||"",
-        runtime:document.getElementById("up-runtime").value.trim()||"",
-        director:document.getElementById("up-director").value.trim()||""
+    if (state.thumbFile) {
+      document.getElementById("thumb-progress").style.display = "block";
+      tp = handleUpload(state.thumbFile, "image", "thumb-fill", "thumb-pct").then(function (u) { state.uploadedThumbUrl = u; });
+    } else { tp = Promise.resolve(); }
+    Promise.all([vp, tp]).then(function () {
+      var vd = {
+        title: t, description: d, views: 0, likes: 0, dislikes: 0,
+        videoUrl: state.uploadedVideoUrl,
+        thumbnailUrl: state.uploadedThumbUrl || "",
+        country: document.getElementById("up-country").value.trim() || "Unknown",
+        vjName: vj, userId: state.user.uid, createdAt: Date.now(),
+        year: document.getElementById("up-year").value.trim() || "",
+        genre: document.getElementById("up-genre").value.trim() || "",
+        rated: document.getElementById("up-rated").value.trim() || "",
+        imdbRating: document.getElementById("up-imdb").value.trim() || "",
+        runtime: document.getElementById("up-runtime").value.trim() || "",
+        director: document.getElementById("up-director").value.trim() || ""
       };
-      /* Write STRICTLY to description/Translated/<push-key> */
       return db.ref(FB_PATH).push(vd);
-    }).then(function(){
-      /* Clean any stray nodes that may have appeared under description/ */
-      cleanupDescriptionPath();
-      showToast("Translation uploaded and verified successfully!","success");
+    }).then(function () {
+      showToast("Translation uploaded and verified successfully!", "success");
       resetUploadForm();
-      sb.classList.remove("loading");sb.disabled=false;
+      sb.classList.remove("loading"); sb.disabled = false;
       navigateTo("movies");
-    }).catch(function(err){
-      console.error("Upload error:",err);
-      showToast("Upload failed: "+parseError(err),"error");
-      sb.classList.remove("loading");sb.disabled=false;
+    }).catch(function (err) {
+      console.error("Upload error:", err);
+      showToast("Upload failed: " + parseError(err), "error");
+      sb.classList.remove("loading"); sb.disabled = false;
     });
   });
 }
 
-function resetUploadForm(){
-  state.videoFile=null;state.thumbFile=null;
-  state.uploadedVideoUrl="";state.uploadedThumbUrl="";state.omdbData=null;
+function resetUploadForm() {
+  state.videoFile = null; state.thumbFile = null;
+  state.uploadedVideoUrl = ""; state.uploadedThumbUrl = ""; state.omdbData = null;
   document.getElementById("video-dropzone").classList.remove("has-file");
-  document.getElementById("video-preview").style.display="none";
-  document.getElementById("video-preview").innerHTML="";
-  document.getElementById("video-file-name").style.display="none";
-  document.getElementById("video-progress").style.display="none";
-  document.getElementById("video-fill").style.width="0%";
-  document.getElementById("remove-video").style.display="none";
-  document.getElementById("video-file-input").value="";
-  document.getElementById("up-title").value="";
-  document.getElementById("up-year").value="";
-  document.getElementById("up-rated").value="";
-  document.getElementById("up-genre").value="";
-  document.getElementById("up-runtime").value="";
-  document.getElementById("up-imdb").value="";
-  document.getElementById("up-director").value="";
-  document.getElementById("up-desc").value="";
-  document.getElementById("up-vjname").value="";
-  document.getElementById("up-country").value="";
-  document.getElementById("title-count").textContent="0";
-  document.getElementById("desc-count").textContent="0";
-  document.getElementById("up-desc-error").textContent="";
-  document.getElementById("up-vjname-error").textContent="";
-  document.getElementById("omdb-indicator").style.display="none";
-  document.getElementById("thumb-preview-box").innerHTML='<div class="placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><div>Auto-fetched from OMDb<br>or upload manually</div></div>';
-  document.getElementById("thumb-progress").style.display="none";
-  document.getElementById("thumb-fill").style.width="0%";
-  document.getElementById("thumb-file-input").value="";
-  document.getElementById("omdb-data-panel").innerHTML='<ul class="omdb-data-list"><li><span class="label">Status</span><span class="value" id="omdb-status">Enter a title</span></li></ul>';
+  document.getElementById("video-preview").style.display = "none";
+  document.getElementById("video-preview").innerHTML = "";
+  document.getElementById("video-file-name").style.display = "none";
+  document.getElementById("video-progress").style.display = "none";
+  document.getElementById("video-fill").style.width = "0%";
+  document.getElementById("remove-video").style.display = "none";
+  document.getElementById("video-file-input").value = "";
+  document.getElementById("up-title").value = "";
+  document.getElementById("up-year").value = "";
+  document.getElementById("up-rated").value = "";
+  document.getElementById("up-genre").value = "";
+  document.getElementById("up-runtime").value = "";
+  document.getElementById("up-imdb").value = "";
+  document.getElementById("up-director").value = "";
+  document.getElementById("up-desc").value = "";
+  document.getElementById("up-vjname").value = "";
+  document.getElementById("up-country").value = "";
+  document.getElementById("title-count").textContent = "0";
+  document.getElementById("desc-count").textContent = "0";
+  document.getElementById("up-desc-error").textContent = "";
+  document.getElementById("up-vjname-error").textContent = "";
+  document.getElementById("omdb-indicator").style.display = "none";
+  document.getElementById("thumb-preview-box").innerHTML = '<div class="placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><div>Auto-fetched from OMDb<br>or upload manually</div></div>';
+  document.getElementById("thumb-progress").style.display = "none";
+  document.getElementById("thumb-fill").style.width = "0%";
+  document.getElementById("thumb-file-input").value = "";
+  document.getElementById("omdb-data-panel").innerHTML = '<ul class="omdb-data-list"><li><span class="label">Status</span><span class="value" id="omdb-status">Enter a title</span></li></ul>';
   var hint = document.getElementById("video-upload-hint");
   if (hint) hint.style.display = "none";
 }
@@ -2245,135 +2206,135 @@ function resetUploadForm(){
 /* =============================================
    Movies View
    ============================================= */
-function loadMovies(){
-  db.ref(FB_PATH).once("value").then(function(snap){
-    state.allVideos=[];
-    snap.forEach(function(c){var d=c.val();d._id=c.key;state.allVideos.push(d);});
+function loadMovies() {
+  db.ref(FB_PATH).once("value").then(function (snap) {
+    state.allVideos = [];
+    snap.forEach(function (c) { var d = c.val(); d._id = c.key; state.allVideos.push(d); });
     applyFilters();
-  }).catch(function(e){showToast("Failed to load translations","error");});
+  }).catch(function (e) { showToast("Failed to load translations", "error"); });
 }
-function applyFilters(){
-  var s=(document.getElementById("movie-search").value||"").toLowerCase().trim(),
-      c=document.getElementById("filter-category").value,
-      so=document.getElementById("filter-sort").value,
-      f=state.allVideos.slice();
-  if(c!=="all")f=f.filter(function(v){return(v.vjName||"").toLowerCase()===c.toLowerCase();});
-  if(s)f=f.filter(function(v){
-    return(v.title||"").toLowerCase().indexOf(s)>=0||
-          (v.description||"").toLowerCase().indexOf(s)>=0||
-          (v.country||"").toLowerCase().indexOf(s)>=0||
-          (v.director||"").toLowerCase().indexOf(s)>=0||
-          (v.vjName||"").toLowerCase().indexOf(s)>=0;
+function applyFilters() {
+  var s = (document.getElementById("movie-search").value || "").toLowerCase().trim(),
+    c = document.getElementById("filter-category").value,
+    so = document.getElementById("filter-sort").value,
+    f = state.allVideos.slice();
+  if (c !== "all") f = f.filter(function (v) { return (v.vjName || "").toLowerCase() === c.toLowerCase(); });
+  if (s) f = f.filter(function (v) {
+    return (v.title || "").toLowerCase().indexOf(s) >= 0 ||
+      (v.description || "").toLowerCase().indexOf(s) >= 0 ||
+      (v.country || "").toLowerCase().indexOf(s) >= 0 ||
+      (v.director || "").toLowerCase().indexOf(s) >= 0 ||
+      (v.vjName || "").toLowerCase().indexOf(s) >= 0;
   });
-  if(so==="recent")f.sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
-  else if(so==="oldest")f.sort(function(a,b){return(a.createdAt||0)-(b.createdAt||0);});
-  else if(so==="views")f.sort(function(a,b){return(b.views||0)-(a.views||0);});
-  else if(so==="likes")f.sort(function(a,b){return(b.likes||0)-(a.likes||0);});
-  else if(so==="title")f.sort(function(a,b){return(a.title||"").localeCompare(b.title||"");});
-  state.filteredVideos=f;state.page=1;renderMoviesTable();
+  if (so === "recent") f.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  else if (so === "oldest") f.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+  else if (so === "views") f.sort(function (a, b) { return (b.views || 0) - (a.views || 0); });
+  else if (so === "likes") f.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
+  else if (so === "title") f.sort(function (a, b) { return (a.title || "").localeCompare(b.title || ""); });
+  state.filteredVideos = f; state.page = 1; renderMoviesTable();
 }
-function renderMoviesTable(){
-  var v=state.filteredVideos,ps=state.pageSize,p=state.page,
-      st=(p-1)*ps,en=st+ps,pv=v.slice(st,en),
-      tp=Math.ceil(v.length/ps)||1;
-  document.getElementById("movies-count").textContent=v.length+" translation"+(v.length!==1?"s":"");
-  var tb=document.getElementById("movies-tbody");
-  if(pv.length===0){
-    tb.innerHTML='<tr><td colspan="7"><div class="table-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="m10 8 5 4-5 4V8z"/></svg><h4>No translations found</h4><p>Try adjusting your search or filters</p></div></td></tr>';
-  }else{
-    var h="";
-    pv.forEach(function(x){
-      h+='<tr><td><img class="tbl-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/64x40/e63946/fff?text=?\'"></td><td class="tbl-title" title="'+esc(x.title)+'">'+esc(x.title||"Untitled")+'</td><td><span class="tbl-cat">'+esc((x.vjName||"\u2014").replace("vj-","VJ "))+'</span></td><td class="tbl-num">'+fmtNum(x.views||0)+'</td><td class="tbl-num">'+fmtNum(x.likes||0)+'</td><td class="tbl-date">'+fmtDate(x.createdAt)+'</td><td><div class="tbl-actions"><button class="btn-action edit" data-id="'+x._id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn-action delete" data-id="'+x._id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></td></tr>';
+function renderMoviesTable() {
+  var v = state.filteredVideos, ps = state.pageSize, p = state.page,
+    st = (p - 1) * ps, en = st + ps, pv = v.slice(st, en),
+    tp = Math.ceil(v.length / ps) || 1;
+  document.getElementById("movies-count").textContent = v.length + " translation" + (v.length !== 1 ? "s" : "");
+  var tb = document.getElementById("movies-tbody");
+  if (pv.length === 0) {
+    tb.innerHTML = '<tr><td colspan="7"><div class="table-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="m10 8 5 4-5 4V8z"/></svg><h4>No translations found</h4><p>Try adjusting your search or filters</p></div></td></tr>';
+  } else {
+    var h = "";
+    pv.forEach(function (x) {
+      h += '<tr><td><img class="tbl-thumb" src="' + getThumb(x) + '" alt="" onerror="this.src=\'https://placehold.co/64x40/e63946/fff?text=?\'"></td><td class="tbl-title" title="' + esc(x.title) + '">' + esc(x.title || "Untitled") + '</td><td><span class="tbl-cat">' + esc((x.vjName || "\u2014").replace("vj-", "VJ ")) + '</span></td><td class="tbl-num">' + fmtNum(x.views || 0) + '</td><td class="tbl-num">' + fmtNum(x.likes || 0) + '</td><td class="tbl-date">' + fmtDate(x.createdAt) + '</td><td><div class="tbl-actions"><button class="btn-action edit" data-id="' + x._id + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn-action delete" data-id="' + x._id + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></td></tr>';
     });
-    tb.innerHTML=h;
+    tb.innerHTML = h;
   }
-  var mc=document.getElementById("mobile-cards");
-  if(pv.length===0){
-    mc.innerHTML='<div class="table-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="m10 8 5 4-5 4V8z"/></svg><h4>No translations found</h4></div>';
-  }else{
-    var mh="";
-    pv.forEach(function(x){
-      mh+='<div class="mobile-card"><img class="mobile-card-img" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/100x64/e63946/fff?text=?\'"><div class="mobile-card-info"><div class="mobile-card-title">'+esc(x.title||"Untitled")+'</div><div class="mobile-card-meta"><span>'+esc((x.vjName||"\u2014").replace("vj-","VJ "))+'</span><span>'+fmtNum(x.views||0)+' views</span><span>'+fmtDate(x.createdAt)+'</span></div><div class="mobile-card-actions"><button class="btn-action edit" data-id="'+x._id+'"> Edit</button><button class="btn-action delete" data-id="'+x._id+'"> Del</button></div></div></div>';
+  var mc = document.getElementById("mobile-cards");
+  if (pv.length === 0) {
+    mc.innerHTML = '<div class="table-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="m10 8 5 4-5 4V8z"/></svg><h4>No translations found</h4></div>';
+  } else {
+    var mh = "";
+    pv.forEach(function (x) {
+      mh += '<div class="mobile-card"><img class="mobile-card-img" src="' + getThumb(x) + '" alt="" onerror="this.src=\'https://placehold.co/100x64/e63946/fff?text=?\'"><div class="mobile-card-info"><div class="mobile-card-title">' + esc(x.title || "Untitled") + '</div><div class="mobile-card-meta"><span>' + esc((x.vjName || "\u2014").replace("vj-", "VJ ")) + '</span><span>' + fmtNum(x.views || 0) + ' views</span><span>' + fmtDate(x.createdAt) + '</span></div><div class="mobile-card-actions"><button class="btn-action edit" data-id="' + x._id + '"> Edit</button><button class="btn-action delete" data-id="' + x._id + '"> Del</button></div></div></div>';
     });
-    mc.innerHTML=mh;
+    mc.innerHTML = mh;
   }
   renderPagination(tp);
   bindTableActions();
 }
-function renderPagination(tp){
-  var el=document.getElementById("pagination");
-  if(tp<=1){el.innerHTML="";return;}
-  var h='<button class="btn-page" data-page="prev" '+(state.page<=1?"disabled":"")+'>Prev</button>';
-  var sp=Math.max(1,state.page-2),ep=Math.min(tp,sp+4);
-  if(ep-sp<4)sp=Math.max(1,ep-4);
-  for(var i=sp;i<=ep;i++){
-    h+='<button class="btn-page'+(i===state.page?' active':'')+'" data-page="'+i+'">'+i+'</button>';
+function renderPagination(tp) {
+  var el = document.getElementById("pagination");
+  if (tp <= 1) { el.innerHTML = ""; return; }
+  var h = '<button class="btn-page" data-page="prev" ' + (state.page <= 1 ? "disabled" : "") + '>Prev</button>';
+  var sp = Math.max(1, state.page - 2), ep = Math.min(tp, sp + 4);
+  if (ep - sp < 4) sp = Math.max(1, ep - 4);
+  for (var i = sp; i <= ep; i++) {
+    h += '<button class="btn-page' + (i === state.page ? ' active' : '') + '" data-page="' + i + '">' + i + '</button>';
   }
-  h+='<span class="page-info">of '+tp+'</span><button class="btn-page" data-page="next" '+(state.page>=tp?"disabled":"")+'>Next</button>';
-  el.innerHTML=h;
-  el.querySelectorAll(".btn-page").forEach(function(b){
-    b.addEventListener("click",function(){
-      var p=this.dataset.page;
-      if(p==="prev")state.page=Math.max(1,state.page-1);
-      else if(p==="next")state.page=Math.min(tp,state.page+1);
-      else state.page=parseInt(p);
+  h += '<span class="page-info">of ' + tp + '</span><button class="btn-page" data-page="next" ' + (state.page >= tp ? "disabled" : "") + '>Next</button>';
+  el.innerHTML = h;
+  el.querySelectorAll(".btn-page").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var p = this.dataset.page;
+      if (p === "prev") state.page = Math.max(1, state.page - 1);
+      else if (p === "next") state.page = Math.min(tp, state.page + 1);
+      else state.page = parseInt(p);
       renderMoviesTable();
     });
   });
 }
-function bindTableActions(){
-  document.querySelectorAll(".btn-action.edit").forEach(function(b){
-    b.addEventListener("click",function(){openEditModal(this.dataset.id);});
+function bindTableActions() {
+  document.querySelectorAll(".btn-action.edit").forEach(function (b) {
+    b.addEventListener("click", function () { openEditModal(this.dataset.id); });
   });
-  document.querySelectorAll(".btn-action.delete").forEach(function(b){
-    b.addEventListener("click",function(){openDeleteModal(this.dataset.id);});
+  document.querySelectorAll(".btn-action.delete").forEach(function (b) {
+    b.addEventListener("click", function () { openDeleteModal(this.dataset.id); });
   });
 }
 
 /* =============================================
    Modals
    ============================================= */
-function openEditModal(id){
-  var v=state.allVideos.find(function(x){return x._id===id;});
-  if(!v){showToast("Not found","error");return;}
-  state.editId=id;state.editVideoFile=null;state.editThumbFile=null;
-  state.editVideoUrl=v.videoUrl||"";state.editThumbUrl=v.thumbnailUrl||"";
-  document.getElementById("edit-thumb").src=getThumb(v);
-  document.getElementById("edit-thumb").onerror=function(){this.src='https://placehold.co/220x330/e63946/fff?text=No+Image';};
-  document.getElementById("ed-title").value=v.title||"";
-  document.getElementById("ed-year").value=v.year||"";
-  document.getElementById("ed-rated").value=v.rated||"";
-  document.getElementById("ed-genre").value=v.genre||"";
-  document.getElementById("ed-runtime").value=v.runtime||"";
-  document.getElementById("ed-imdb").value=v.imdbRating||"";
-  document.getElementById("ed-director").value=v.director||"";
-  document.getElementById("ed-desc").value=v.description||"";
-  document.getElementById("ed-vjname").value=v.vjName||"";
-  document.getElementById("ed-country").value=v.country||"";
-  document.getElementById("edit-video-status").style.display=state.editVideoUrl?"flex":"none";
-  document.getElementById("edit-video-status").innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Video uploaded';
-  document.getElementById("edit-video-status").style.color="var(--success)";
-  document.getElementById("edit-video-progress").style.display="none";
-  document.getElementById("edit-thumb-progress").style.display="none";
-  document.getElementById("edit-modal").style.display="flex";
-  document.body.style.overflow="hidden";
+function openEditModal(id) {
+  var v = state.allVideos.find(function (x) { return x._id === id; });
+  if (!v) { showToast("Not found", "error"); return; }
+  state.editId = id; state.editVideoFile = null; state.editThumbFile = null;
+  state.editVideoUrl = v.videoUrl || ""; state.editThumbUrl = v.thumbnailUrl || "";
+  document.getElementById("edit-thumb").src = getThumb(v);
+  document.getElementById("edit-thumb").onerror = function () { this.src = 'https://placehold.co/220x330/e63946/fff?text=No+Image'; };
+  document.getElementById("ed-title").value = v.title || "";
+  document.getElementById("ed-year").value = v.year || "";
+  document.getElementById("ed-rated").value = v.rated || "";
+  document.getElementById("ed-genre").value = v.genre || "";
+  document.getElementById("ed-runtime").value = v.runtime || "";
+  document.getElementById("ed-imdb").value = v.imdbRating || "";
+  document.getElementById("ed-director").value = v.director || "";
+  document.getElementById("ed-desc").value = v.description || "";
+  document.getElementById("ed-vjname").value = v.vjName || "";
+  document.getElementById("ed-country").value = v.country || "";
+  document.getElementById("edit-video-status").style.display = state.editVideoUrl ? "flex" : "none";
+  document.getElementById("edit-video-status").innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Video uploaded';
+  document.getElementById("edit-video-status").style.color = "var(--success)";
+  document.getElementById("edit-video-progress").style.display = "none";
+  document.getElementById("edit-thumb-progress").style.display = "none";
+  document.getElementById("edit-modal").style.display = "flex";
+  document.body.style.overflow = "hidden";
 }
-function closeEditModal(){
-  document.getElementById("edit-modal").style.display="none";
-  document.body.style.overflow="";
-  state.editId=null;state.editVideoFile=null;state.editThumbFile=null;
+function closeEditModal() {
+  document.getElementById("edit-modal").style.display = "none";
+  document.body.style.overflow = "";
+  state.editId = null; state.editVideoFile = null; state.editThumbFile = null;
 }
-function initEditModal(){
-  document.getElementById("edit-close").addEventListener("click",closeEditModal);
-  document.getElementById("edit-cancel").addEventListener("click",closeEditModal);
-  document.getElementById("edit-modal").addEventListener("click",function(e){if(e.target===this)closeEditModal();});
-  document.getElementById("edit-replace-video").addEventListener("click",function(){
+function initEditModal() {
+  document.getElementById("edit-close").addEventListener("click", closeEditModal);
+  document.getElementById("edit-cancel").addEventListener("click", closeEditModal);
+  document.getElementById("edit-modal").addEventListener("click", function (e) { if (e.target === this) closeEditModal(); });
+  document.getElementById("edit-replace-video").addEventListener("click", function () {
     document.getElementById("edit-video-file").click();
   });
-  document.getElementById("edit-video-file").addEventListener("change",function(){
-    var f=this.files[0];if(!f)return;
-    if(f.size>5*1024*1024*1024){showToast("Video must be under 5GB","error");return;}
-    state.editVideoFile=f;
+  document.getElementById("edit-video-file").addEventListener("change", function () {
+    var f = this.files[0]; if (!f) return;
+    if (f.size > 5 * 1024 * 1024 * 1024) { showToast("Video must be under 5GB", "error"); return; }
+    state.editVideoFile = f;
     var statusEl = document.getElementById("edit-video-status");
     statusEl.style.display = "flex";
     statusEl.style.color = "var(--info)";
@@ -2384,157 +2345,148 @@ function initEditModal(){
       statusEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ' + esc(f.name) + ' (' + fmtBytes(f.size) + ')';
     }
   });
-  document.getElementById("edit-replace-thumb").addEventListener("click",function(){
+  document.getElementById("edit-replace-thumb").addEventListener("click", function () {
     document.getElementById("edit-thumb-file").click();
   });
-  document.getElementById("edit-thumb-file").addEventListener("change",function(){
-    var f=this.files[0];if(!f)return;
-    if(f.size>5*1024*1024){showToast("Thumbnail must be under 5MB","error");return;}
-    state.editThumbFile=f;
-    document.getElementById("edit-thumb").src=URL.createObjectURL(f);
+  document.getElementById("edit-thumb-file").addEventListener("change", function () {
+    var f = this.files[0]; if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { showToast("Thumbnail must be under 5MB", "error"); return; }
+    state.editThumbFile = f;
+    document.getElementById("edit-thumb").src = URL.createObjectURL(f);
   });
 
-  /* ── Edit save: write ONLY to description/Translated/<id>, then cleanup ── */
-  document.getElementById("edit-save").addEventListener("click",function(){
-    var sb=this;sb.disabled=true;
-    var vp=Promise.resolve();
-    if(state.editVideoFile){
-      document.getElementById("edit-video-progress").style.display="block";
-      vp=handleUpload(state.editVideoFile,"video","edit-video-fill","edit-video-pct").then(function(u){state.editVideoUrl=u;});
+  /* ── Edit save: write to Translated/<editId> ── */
+  document.getElementById("edit-save").addEventListener("click", function () {
+    var sb = this; sb.disabled = true;
+    var vp = Promise.resolve();
+    if (state.editVideoFile) {
+      document.getElementById("edit-video-progress").style.display = "block";
+      vp = handleUpload(state.editVideoFile, "video", "edit-video-fill", "edit-video-pct").then(function (u) { state.editVideoUrl = u; });
     }
-    var tp=Promise.resolve();
-    if(state.editThumbFile){
-      document.getElementById("edit-thumb-progress").style.display="block";
-      tp=handleUpload(state.editThumbFile,"image","edit-thumb-fill","edit-thumb-pct").then(function(u){state.editThumbUrl=u;});
+    var tp = Promise.resolve();
+    if (state.editThumbFile) {
+      document.getElementById("edit-thumb-progress").style.display = "block";
+      tp = handleUpload(state.editThumbFile, "image", "edit-thumb-fill", "edit-thumb-pct").then(function (u) { state.editThumbUrl = u; });
     }
-    Promise.all([vp,tp]).then(function(){
-      /* Write STRICTLY to description/Translated/<editId> */
-      return db.ref(FB_PATH+"/"+state.editId).update({
-        title:document.getElementById("ed-title").value.trim(),
-        description:document.getElementById("ed-desc").value.trim(),
-        year:document.getElementById("ed-year").value.trim(),
-        rated:document.getElementById("ed-rated").value.trim(),
-        genre:document.getElementById("ed-genre").value.trim(),
-        runtime:document.getElementById("ed-runtime").value.trim(),
-        imdbRating:document.getElementById("ed-imdb").value.trim(),
-        director:document.getElementById("ed-director").value.trim(),
-        vjName:document.getElementById("ed-vjname").value,
-        country:document.getElementById("ed-country").value.trim(),
-        videoUrl:state.editVideoUrl,
-        thumbnailUrl:state.editThumbUrl
+    Promise.all([vp, tp]).then(function () {
+      return db.ref(FB_PATH + "/" + state.editId).update({
+        title: document.getElementById("ed-title").value.trim(),
+        description: document.getElementById("ed-desc").value.trim(),
+        year: document.getElementById("ed-year").value.trim(),
+        rated: document.getElementById("ed-rated").value.trim(),
+        genre: document.getElementById("ed-genre").value.trim(),
+        runtime: document.getElementById("ed-runtime").value.trim(),
+        imdbRating: document.getElementById("ed-imdb").value.trim(),
+        director: document.getElementById("ed-director").value.trim(),
+        vjName: document.getElementById("ed-vjname").value,
+        country: document.getElementById("ed-country").value.trim(),
+        videoUrl: state.editVideoUrl,
+        thumbnailUrl: state.editThumbUrl
       });
-    }).then(function(){
-      /* Clean any stray nodes under description/ */
-      cleanupDescriptionPath();
-      showToast("Updated and verified successfully!","success");
-      closeEditModal();sb.disabled=false;loadMovies();
-    }).catch(function(err){
-      showToast("Update failed: "+parseError(err),"error");
-      sb.disabled=false;
+    }).then(function () {
+      showToast("Updated and verified successfully!", "success");
+      closeEditModal(); sb.disabled = false; loadMovies();
+    }).catch(function (err) {
+      showToast("Update failed: " + parseError(err), "error");
+      sb.disabled = false;
     });
   });
 }
 
-function openDeleteModal(id){
-  var v=state.allVideos.find(function(x){return x._id===id;});
-  if(!v){showToast("Not found","error");return;}
-  state.deleteId=id;
-  document.getElementById("delete-movie-name").textContent='\u201C'+(v.title||"Untitled")+'\u201D?';
-  document.getElementById("delete-modal").style.display="flex";
-  document.body.style.overflow="hidden";
+function openDeleteModal(id) {
+  var v = state.allVideos.find(function (x) { return x._id === id; });
+  if (!v) { showToast("Not found", "error"); return; }
+  state.deleteId = id;
+  document.getElementById("delete-movie-name").textContent = '\u201C' + (v.title || "Untitled") + '\u201D?';
+  document.getElementById("delete-modal").style.display = "flex";
+  document.body.style.overflow = "hidden";
 }
-function closeDeleteModal(){
-  document.getElementById("delete-modal").style.display="none";
-  document.body.style.overflow="";
-  state.deleteId=null;
+function closeDeleteModal() {
+  document.getElementById("delete-modal").style.display = "none";
+  document.body.style.overflow = "";
+  state.deleteId = null;
 }
-function initDeleteModal(){
-  document.getElementById("delete-close").addEventListener("click",closeDeleteModal);
-  document.getElementById("delete-cancel").addEventListener("click",closeDeleteModal);
-  document.getElementById("delete-modal").addEventListener("click",function(e){if(e.target===this)closeDeleteModal();});
+function initDeleteModal() {
+  document.getElementById("delete-close").addEventListener("click", closeDeleteModal);
+  document.getElementById("delete-cancel").addEventListener("click", closeDeleteModal);
+  document.getElementById("delete-modal").addEventListener("click", function (e) { if (e.target === this) closeDeleteModal(); });
 
-  /* ── Delete: remove ONLY from description/Translated/<id>, then cleanup ── */
-  document.getElementById("delete-confirm").addEventListener("click",function(){
-    var b=this;b.disabled=true;
-    /* Remove STRICTLY from description/Translated/<deleteId> */
-    db.ref(FB_PATH+"/"+state.deleteId).remove().then(function(){
-      /* Clean any stray nodes under description/ */
-      cleanupDescriptionPath();
-      showToast("Deleted successfully!","success");
-      closeDeleteModal();b.disabled=false;loadMovies();
-    }).catch(function(err){
-      showToast("Delete failed: "+parseError(err),"error");
-      b.disabled=false;
+  /* ── Delete: remove from Translated/<deleteId> ── */
+  document.getElementById("delete-confirm").addEventListener("click", function () {
+    var b = this; b.disabled = true;
+    db.ref(FB_PATH + "/" + state.deleteId).remove().then(function () {
+      showToast("Deleted successfully!", "success");
+      closeDeleteModal(); b.disabled = false; loadMovies();
+    }).catch(function (err) {
+      showToast("Delete failed: " + parseError(err), "error");
+      b.disabled = false;
     });
   });
 }
 
-function initMoviesView(){
-  var si=document.getElementById("movie-search"),st=null;
-  si.addEventListener("input",function(){clearTimeout(st);st=setTimeout(function(){applyFilters();},300);});
-  document.getElementById("filter-category").addEventListener("change",function(){applyFilters();});
-  document.getElementById("filter-sort").addEventListener("change",function(){applyFilters();});
+function initMoviesView() {
+  var si = document.getElementById("movie-search"), st = null;
+  si.addEventListener("input", function () { clearTimeout(st); st = setTimeout(function () { applyFilters(); }, 300); });
+  document.getElementById("filter-category").addEventListener("change", function () { applyFilters(); });
+  document.getElementById("filter-sort").addEventListener("change", function () { applyFilters(); });
 }
 
 /* =============================================
    Login & Init
    ============================================= */
-(function(){
-  var lf=document.getElementById("login-form");if(!lf)return;
-  lf.addEventListener("submit",function(e){
+(function () {
+  var lf = document.getElementById("login-form"); if (!lf) return;
+  lf.addEventListener("submit", function (e) {
     e.preventDefault();
-    var em=document.getElementById("auth-email").value.trim(),
-        pw=document.getElementById("auth-password").value,
-        lb=document.getElementById("login-btn"),
-        ee=document.getElementById("auth-email-error"),
-        pe=document.getElementById("auth-password-error");
-    ee.textContent="";pe.textContent="";
-    var v=true;
-    if(!em||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ee.textContent="Please enter a valid email";v=false;}
-    if(!pw||pw.length<6){pe.textContent="Password must be at least 6 characters";v=false;}
-    if(!v)return;
-    lb.classList.add("loading");lb.disabled=true;
-    auth.signInWithEmailAndPassword(em,pw).catch(function(err){
-      lb.classList.remove("loading");lb.disabled=false;
-      var m={
-        "auth/user-not-found":"No account found.",
-        "auth/wrong-password":"Incorrect password.",
-        "auth/invalid-credential":"Invalid email or password.",
-        "auth/too-many-requests":"Too many attempts. Please wait."
+    var em = document.getElementById("auth-email").value.trim(),
+      pw = document.getElementById("auth-password").value,
+      lb = document.getElementById("login-btn"),
+      ee = document.getElementById("auth-email-error"),
+      pe = document.getElementById("auth-password-error");
+    ee.textContent = ""; pe.textContent = "";
+    var v = true;
+    if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { ee.textContent = "Please enter a valid email"; v = false; }
+    if (!pw || pw.length < 6) { pe.textContent = "Password must be at least 6 characters"; v = false; }
+    if (!v) return;
+    lb.classList.add("loading"); lb.disabled = true;
+    auth.signInWithEmailAndPassword(em, pw).catch(function (err) {
+      lb.classList.remove("loading"); lb.disabled = false;
+      var m = {
+        "auth/user-not-found": "No account found.",
+        "auth/wrong-password": "Incorrect password.",
+        "auth/invalid-credential": "Invalid email or password.",
+        "auth/too-many-requests": "Too many attempts. Please wait."
       };
-      var msg=m[err.code]||"Login failed: "+err.message;
-      if(err.code==="auth/invalid-credential"||err.code==="auth/wrong-password")pe.textContent="Incorrect password";
-      else ee.textContent=msg;
+      var msg = m[err.code] || "Login failed: " + err.message;
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") pe.textContent = "Incorrect password";
+      else ee.textContent = msg;
     });
   });
 })();
 
-function initApp(){
-  /* ── Run cleanup on every app init to remove pre-existing stray nodes ── */
-  cleanupDescriptionPath();
-
-  document.querySelectorAll(".nav-item").forEach(function(b){
-    b.addEventListener("click",function(){navigateTo(this.dataset.view);});
+function initApp() {
+  document.querySelectorAll(".nav-item").forEach(function (b) {
+    b.addEventListener("click", function () { navigateTo(this.dataset.view); });
   });
-  document.getElementById("sidebar-toggle").addEventListener("click",function(){
+  document.getElementById("sidebar-toggle").addEventListener("click", function () {
     document.getElementById("sidebar").classList.add("open");
     document.getElementById("sidebar-backdrop").classList.add("active");
   });
-  document.getElementById("sidebar-backdrop").addEventListener("click",function(){
+  document.getElementById("sidebar-backdrop").addEventListener("click", function () {
     document.getElementById("sidebar").classList.remove("open");
     document.getElementById("sidebar-backdrop").classList.remove("active");
   });
-  document.getElementById("signout-btn").addEventListener("click",function(){
-    auth.signOut().then(function(){showToast("Signed out","info");showAuthGuard();});
+  document.getElementById("signout-btn").addEventListener("click", function () {
+    auth.signOut().then(function () { showToast("Signed out", "info"); showAuthGuard(); });
   });
-  initEditModal();initDeleteModal();initUploadView();initMoviesView();loadDashboard();
+  initEditModal(); initDeleteModal(); initUploadView(); initMoviesView(); loadDashboard();
 }
 
-auth.onAuthStateChanged(function(user){
-  if(!user){showAuthGuard();return;}
-  if(user.uid!==ADMIN_UID){showAccessDenied();return;}
-  state.user=user;state.isAdmin=true;
-  showAdminLayout();initApp();
+auth.onAuthStateChanged(function (user) {
+  if (!user) { showAuthGuard(); return; }
+  if (user.uid !== ADMIN_UID) { showAccessDenied(); return; }
+  state.user = user; state.isAdmin = true;
+  showAdminLayout(); initApp();
 });
 </script>
 </body>
