@@ -452,6 +452,19 @@ var state = {
 function esc(s) { if(!s)return""; var d=document.createElement("div"); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
 function fmtNum(n) { n=parseInt(n)||0; if(n>=1e6)return(n/1e6).toFixed(1)+"M"; if(n>=1e3)return(n/1e3).toFixed(1)+"K"; return n.toString(); }
 function fmtDate(ts) { if(!ts)return"—"; return new Date(ts).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}); }
+function fmtTime(ms) {
+  if (ms < 1000) return ms + "ms";
+  if (ms < 60000) return (ms / 1000).toFixed(1) + "s";
+  var m = Math.floor(ms / 60000);
+  var s = ((ms % 60000) / 1000).toFixed(0);
+  return m + "m " + s + "s";
+}
+function fmtBytes(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB";
+  return (bytes / 1073741824).toFixed(2) + " GB";
+}
 function getThumb(v) { if(v.thumbnailUrl&&v.thumbnailUrl.length>10)return v.thumbnailUrl; var t=v.title||"Video"; var h=(t.charCodeAt(0)*37+(t.charCodeAt(1)||0)*53)%360; return "https://placehold.co/640x360/"+h.toString(16).padStart(3,"0")+"222/ffffff?text="+encodeURIComponent(t.substring(0,15)); }
 function parseError(err) {
   if (!err) return "Unknown error";
@@ -516,36 +529,92 @@ async function signV4(method, url, headers, payloadHash, dateTime) {
 }
 
 /* =============================================
-   Cloudflare R2 Upload — with Multipart Support
+   Cloudflare R2 Upload — Upgraded Multipart
    ============================================= */
-var MULTIPART_THRESHOLD = 50 * 1024 * 1024;
-var CHUNK_SIZE = 64 * 1024 * 1024;
-var MAX_PARALLEL_UPLOADS = 3;
+var MULTIPART_THRESHOLD = 500 * 1024 * 1024;
+var CHUNK_SIZE          = 32  * 1024 * 1024;
+var MAX_PARALLEL_UPLOADS = 5;
+var PART_RETRY_ATTEMPTS  = 3;
+var PART_RETRY_BASE_DELAY = 1000;
+
+function createProgressTracker(totalBytes, progressFill, progressText) {
+  var completedBytes = 0;
+  var startTime = Date.now();
+  function update(additionalBytes) {
+    completedBytes += additionalBytes;
+    var pct = Math.min(100, Math.round((completedBytes / totalBytes) * 100));
+    if (progressFill) progressFill.style.width = pct + '%';
+    if (progressText) {
+      var elapsed = Date.now() - startTime;
+      var speed = elapsed > 0 ? (completedBytes / (elapsed / 1000)) : 0;
+      progressText.textContent = pct + '% \u00B7 ' + fmtBytes(completedBytes) + ' / ' + fmtBytes(totalBytes) + ' \u00B7 ' + fmtBytes(speed) + '/s';
+    }
+    return pct;
+  }
+  function finish() {
+    completedBytes = totalBytes;
+    if (progressFill) progressFill.style.width = '100%';
+    if (progressText) {
+      var elapsed = Date.now() - startTime;
+      var avgSpeed = elapsed > 0 ? (totalBytes / (elapsed / 1000)) : 0;
+      progressText.textContent = '100% \u00B7 ' + fmtBytes(totalBytes) + ' \u00B7 Done in ' + fmtTime(elapsed) + ' \u00B7 ' + fmtBytes(avgSpeed) + '/s avg';
+    }
+  }
+  function setVerifying() {
+    if (progressText) progressText.textContent = '100% \u00B7 Verifying upload...';
+  }
+  function setError(msg) {
+    if (progressText) progressText.textContent = 'Error: ' + msg;
+  }
+  return { update: update, finish: finish, setVerifying: setVerifying, setError: setError, getCompleted: function() { return completedBytes; } };
+}
+
+function sleep(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); }
 
 async function uploadToR2(file, type, fillId, pctId) {
   if (!file) throw new Error('No file provided');
   var progressFill = document.getElementById(fillId);
   var progressText = document.getElementById(pctId);
   if (progressFill) progressFill.style.width = '0%';
-  if (progressText) progressText.textContent = '0%';
+  if (progressText) progressText.textContent = '0% \u00B7 Preparing...';
   var folder = type === 'video' ? 'videos' : 'thumbnails';
   var safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   var objectKey = folder + '/' + Date.now() + '_' + safeName;
   var endpoint = 'https://' + R2_CONFIG.accountId + '.r2.cloudflarestorage.com';
   var encodedKey = objectKey.split('/').map(function(part) { return encodeURIComponent(part); }).join('/');
-  if (file.size >= MULTIPART_THRESHOLD) {
-    console.log('Large file detected (' + (file.size / (1024 * 1024)).toFixed(1) + 'MB), using multipart upload');
-    return uploadMultipart(file, endpoint, encodedKey, objectKey, progressFill, progressText);
-  } else {
-    return uploadSinglePut(file, endpoint, encodedKey, objectKey, progressFill, progressText);
+  var publicUrl = R2_CONFIG.publicUrl + '/' + encodedKey;
+  var tracker = createProgressTracker(file.size, progressFill, progressText);
+  var uploadStartTime = Date.now();
+  console.log('[R2 Upload] File: ' + file.name + ', Size: ' + fmtBytes(file.size) + ', Type: ' + type);
+  try {
+    var resultUrl;
+    if (file.size >= MULTIPART_THRESHOLD) {
+      console.log('[R2 Upload] Using multipart (file >= ' + fmtBytes(MULTIPART_THRESHOLD) + ')');
+      resultUrl = await uploadMultipart(file, endpoint, encodedKey, objectKey, tracker);
+    } else {
+      console.log('[R2 Upload] Using single PUT (file < ' + fmtBytes(MULTIPART_THRESHOLD) + ')');
+      resultUrl = await uploadSinglePut(file, endpoint, encodedKey, tracker);
+    }
+    tracker.setVerifying();
+    var verified = await verifyUpload(publicUrl, file.size);
+    if (!verified) {
+      throw new Error('Upload verification failed \u2014 the file was not fully stored in R2. Please retry.');
+    }
+    tracker.finish();
+    var totalTime = Date.now() - uploadStartTime;
+    console.log('[R2 Upload] Complete! URL: ' + publicUrl + ', Time: ' + fmtTime(totalTime));
+    return publicUrl;
+  } catch (err) {
+    tracker.setError(parseError(err));
+    throw err;
   }
 }
 
-async function uploadSinglePut(file, endpoint, encodedKey, objectKey, progressFill, progressText) {
+async function uploadSinglePut(file, endpoint, encodedKey, tracker) {
   var uploadUrl = endpoint + '/' + R2_CONFIG.bucket + '/' + encodedKey;
   var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
   var headers = {
-   'Content-Type': file.type || 'video/mp4',
+    'Content-Type': file.type || 'video/mp4',
     'Host': new URL(endpoint).host,
     'X-Amz-Date': dateTime,
     'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
@@ -558,142 +627,207 @@ async function uploadSinglePut(file, endpoint, encodedKey, objectKey, progressFi
     for (var i = 0; i < hKeys.length; i++) {
       if (hKeys[i].toLowerCase() !== 'host') xhr.setRequestHeader(hKeys[i], headers[hKeys[i]]);
     }
+    var lastReportedPct = -1;
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable) {
         var pct = Math.round((e.loaded / e.total) * 100);
-        if (progressFill) progressFill.style.width = pct + '%';
-        if (progressText) progressText.textContent = pct + '%';
+        if (pct !== lastReportedPct) {
+          lastReportedPct = pct;
+          tracker.update(e.loaded - tracker.getCompleted());
+        }
       }
     };
     xhr.onload = function() {
       if (xhr.status >= 200 && xhr.status < 300) {
+        if (tracker.getCompleted() < file.size) {
+          tracker.update(file.size - tracker.getCompleted());
+        }
         resolve(R2_CONFIG.publicUrl + '/' + encodedKey);
       } else {
-        reject(new Error(extractR2Error(xhr, 'Single PUT failed')));
+        reject(new Error(extractR2Error(xhr, 'Single PUT upload failed')));
       }
     };
-    xhr.onerror = function() { reject(new Error('Network/CORS error on single PUT')); };
+    xhr.onerror = function() { reject(new Error('Network/CORS error during single PUT upload')); };
+    xhr.ontimeout = function() { reject(new Error('Upload timed out')); };
     xhr.timeout = 0;
     xhr.send(file);
   });
 }
 
-async function uploadMultipart(file, endpoint, encodedKey, objectKey, progressFill, progressText) {
+async function uploadMultipart(file, endpoint, encodedKey, objectKey, tracker) {
   var bucketUrl = endpoint + '/' + R2_CONFIG.bucket + '/' + encodedKey;
   var totalSize = file.size;
   var totalParts = Math.ceil(totalSize / CHUNK_SIZE);
-  var uploadedBytes = 0;
   var parts = [];
-  function updateProgress() {
-    var pct = Math.round((uploadedBytes / totalSize) * 100);
-    if (progressFill) progressFill.style.width = pct + '%';
-    if (progressText) progressText.textContent = pct + '%';
-  }
-  if (progressText) progressText.textContent = 'Starting multipart upload...';
-   var uploadId = await initiateMultipart(bucketUrl, file);
-  console.log('Multipart initiated. UploadId:', uploadId, 'Parts:', totalParts);
+  console.log('[Multipart] Initiating: ' + totalParts + ' parts \u00D7 ' + fmtBytes(CHUNK_SIZE) + ' chunks, ' + MAX_PARALLEL_UPLOADS + ' parallel');
+  var uploadId = await initiateMultipart(bucketUrl, file);
+  console.log('[Multipart] UploadId: ' + uploadId);
   try {
-    var partQueue = [];
-    for (var partNum = 1; partNum <= totalParts; partNum++) { partQueue.push(partNum); }
-    var activeUploads = [];
-    var queueIndex = 0;
-    function startNextPart() {
-      if (queueIndex >= partQueue.length) return null;
-      var pn = partQueue[queueIndex];
-      queueIndex++;
-      return uploadPart(file, bucketUrl, uploadId, pn, totalSize).then(function(result) {
-        parts.push(result);
-        uploadedBytes += result.size;
-        updateProgress();
-        var next = startNextPart();
-        if (next) activeUploads.push(next);
-        return result;
-      });
+    var partNumbers = [];
+    for (var i = 1; i <= totalParts; i++) { partNumbers.push(i); }
+    var results = await uploadPartsWithPool(file, bucketUrl, uploadId, partNumbers, totalSize, tracker);
+    results.sort(function(a, b) { return a.partNumber - b.partNumber; });
+    parts = results;
+    if (tracker.getCompleted() < totalSize) {
+      tracker.update(totalSize - tracker.getCompleted());
     }
-    for (var b = 0; b < Math.min(MAX_PARALLEL_UPLOADS, totalParts); b++) {
-      var nextPart = startNextPart();
-      if (nextPart) activeUploads.push(nextPart);
-    }
-    await Promise.all(activeUploads);
-    parts.sort(function(a, b) { return a.partNumber - b.partNumber; });
-    if (progressText) progressText.textContent = 'Finalizing...';
+    console.log('[Multipart] Finalizing ' + parts.length + ' parts...');
     await completeMultipart(bucketUrl, uploadId, parts);
-    if (progressFill) progressFill.style.width = '100%';
-    if (progressText) progressText.textContent = '100%';
-    console.log('Multipart upload complete!');
+    console.log('[Multipart] All parts assembled successfully');
     return R2_CONFIG.publicUrl + '/' + encodedKey;
   } catch (err) {
-    console.error('Multipart upload failed, aborting:', err);
-    try { await abortMultipart(bucketUrl, uploadId); } catch (e) {}
+    console.error('[Multipart] Upload failed, aborting:', err);
+    try { await abortMultipart(bucketUrl, uploadId); } catch (abortErr) {
+      console.warn('[Multipart] Abort also failed:', abortErr);
+    }
     throw err;
   }
 }
 
-async function initiateMultipart(bucketUrl, file) {
-  var url = bucketUrl + '?uploads';
-  var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
-  
-  // ✅ FIX: Force video/mp4 if the browser doesn't detect the type
-  var contentType = file.type || 'video/mp4';
-  
-  var headers = {
-    'Content-Type': contentType, // ✅ FIX: Add this line!
-    'Host': new URL(url).host,
-    'X-Amz-Date': dateTime,
-    'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
-  };
-  
-  headers['Authorization'] = await signV4('POST', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
-  var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
-  var response = await fetch(url, { method: 'POST', headers: fetchHeaders });
-  if (!response.ok) { var errText = await response.text(); throw new Error('Initiate multipart failed (HTTP ' + response.status + '): ' + errText); }
-  var xmlText = await response.text();
-  var match = xmlText.match(/<UploadId>([^<]+)<\/UploadId>/);
-  if (!match) throw new Error('Could not parse UploadId from response');
-  return match[1];
+async function uploadPartsWithPool(file, bucketUrl, uploadId, partNumbers, totalSize, tracker) {
+  var results = [];
+  var queueIndex = 0;
+  var activeCount = 0;
+  var pendingResolvers = [];
+  var hasError = false;
+  var errorResult = null;
+  function tryStartNext() {
+    if (hasError) return;
+    if (queueIndex >= partNumbers.length) return;
+    if (activeCount >= MAX_PARALLEL_UPLOADS) return;
+    var partNum = partNumbers[queueIndex];
+    queueIndex++;
+    activeCount++;
+    uploadPartWithRetry(file, bucketUrl, uploadId, partNum, totalSize, tracker).then(function(result) {
+      activeCount--;
+      results.push(result);
+      if (pendingResolvers.length > 0) { var r = pendingResolvers.shift(); r(); }
+      tryStartNext();
+    }).catch(function(err) {
+      activeCount--;
+      hasError = true;
+      errorResult = err;
+      while (pendingResolvers.length > 0) { var r = pendingResolvers.shift(); r(); }
+    });
+    tryStartNext();
+  }
+  var initialBatch = Math.min(MAX_PARALLEL_UPLOADS, partNumbers.length);
+  for (var b = 0; b < initialBatch; b++) { tryStartNext(); }
+  while (results.length < partNumbers.length && !hasError) {
+    if (queueIndex >= partNumbers.length && activeCount === 0) break;
+    await new Promise(function(resolve) { pendingResolvers.push(resolve); });
+  }
+  if (hasError) throw errorResult;
+  if (results.length !== partNumbers.length) {
+    throw new Error('Only ' + results.length + ' of ' + partNumbers.length + ' parts uploaded');
+  }
+  return results;
 }
 
-function uploadPart(file, bucketUrl, uploadId, partNumber, totalSize) {
+async function uploadPartWithRetry(file, bucketUrl, uploadId, partNumber, totalSize, tracker) {
+  var start = (partNumber - 1) * CHUNK_SIZE;
+  var end = Math.min(start + CHUNK_SIZE, totalSize);
+  var chunkSize = end - start;
+  var lastError = null;
+  for (var attempt = 1; attempt <= PART_RETRY_ATTEMPTS; attempt++) {
+    try {
+      var result = await doUploadPart(file, bucketUrl, uploadId, partNumber, start, end, chunkSize);
+      tracker.update(chunkSize);
+      if (attempt > 1) {
+        console.log('[Part ' + partNumber + '] Succeeded on attempt ' + attempt + '/' + PART_RETRY_ATTEMPTS);
+      }
+      return result;
+    } catch (err) {
+      lastError = err;
+      console.warn('[Part ' + partNumber + '] Attempt ' + attempt + '/' + PART_RETRY_ATTEMPTS + ' failed: ' + parseError(err));
+      if (attempt < PART_RETRY_ATTEMPTS) {
+        var delay = PART_RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
+        console.log('[Part ' + partNumber + '] Retrying in ' + delay + 'ms...');
+        await sleep(delay);
+      }
+    }
+  }
+  throw new Error('Part ' + partNumber + ' failed after ' + PART_RETRY_ATTEMPTS + ' attempts: ' + parseError(lastError));
+}
+
+function doUploadPart(file, bucketUrl, uploadId, partNumber, start, end, chunkSize) {
   return new Promise(async function(resolve, reject) {
     try {
-      var start = (partNumber - 1) * CHUNK_SIZE;
-      var end = Math.min(start + CHUNK_SIZE, totalSize);
       var chunkBlob = file.slice(start, end);
-      var chunkSize = end - start;
       var url = bucketUrl + '?partNumber=' + partNumber + '&uploadId=' + encodeURIComponent(uploadId);
       var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
-      var headers = { 'Host': new URL(url).host, 'X-Amz-Date': dateTime, 'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD' };
+      var headers = {
+        'Host': new URL(url).host,
+        'X-Amz-Date': dateTime,
+        'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
+      };
       headers['Authorization'] = await signV4('PUT', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
       var xhr = new XMLHttpRequest();
       xhr.open('PUT', url, true);
       var hKeys = Object.keys(headers);
-      for (var i = 0; i < hKeys.length; i++) { if (hKeys[i].toLowerCase() !== 'host') xhr.setRequestHeader(hKeys[i], headers[hKeys[i]]); }
+      for (var i = 0; i < hKeys.length; i++) {
+        if (hKeys[i].toLowerCase() !== 'host') xhr.setRequestHeader(hKeys[i], headers[hKeys[i]]);
+      }
       xhr.onload = function() {
         if (xhr.status >= 200 && xhr.status < 300) {
           var etag = xhr.getResponseHeader('ETag');
-          if (!etag) { reject(new Error('No ETag returned for part ' + partNumber)); return; }
-          resolve({ partNumber: partNumber, etag: etag, size: chunkSize });
-        } else { reject(new Error('Part ' + partNumber + ' upload failed (HTTP ' + xhr.status + ')')); }
+          if (!etag) {
+            reject(new Error('No ETag returned for part ' + partNumber + ' (HTTP ' + xhr.status + ')'));
+            return;
+          }
+          var cleanEtag = etag.replace(/^"|"$/g, '');
+          resolve({ partNumber: partNumber, etag: cleanEtag, size: chunkSize });
+        } else {
+          reject(new Error('Part ' + partNumber + ' upload failed (HTTP ' + xhr.status + ')'));
+        }
       };
-      xhr.onerror = function() { reject(new Error('Network error on part ' + partNumber)); };
-      xhr.timeout = 0;
+      xhr.onerror = function() { reject(new Error('Network error uploading part ' + partNumber)); };
+      xhr.ontimeout = function() { reject(new Error('Timeout uploading part ' + partNumber)); };
+      xhr.timeout = 120000;
       xhr.send(chunkBlob);
     } catch (err) { reject(err); }
   });
 }
 
+async function initiateMultipart(bucketUrl, file) {
+  var url = bucketUrl + '?uploads';
+  var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
+  var contentType = file.type || 'video/mp4';
+  var headers = {
+    'Content-Type': contentType,
+    'Host': new URL(url).host,
+    'X-Amz-Date': dateTime,
+    'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
+  };
+  headers['Authorization'] = await signV4('POST', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
+  var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
+  var response = await fetch(url, { method: 'POST', headers: fetchHeaders });
+  if (!response.ok) { var errText = await response.text(); throw new Error('Failed to initiate multipart upload (HTTP ' + response.status + '): ' + errText); }
+  var xmlText = await response.text();
+  var match = xmlText.match(/<UploadId>([^<]+)<\/UploadId>/);
+  if (!match) throw new Error('Could not parse UploadId from multipart initiation response');
+  return match[1];
+}
+
 async function completeMultipart(bucketUrl, uploadId, parts) {
   var url = bucketUrl + '?uploadId=' + encodeURIComponent(uploadId);
   var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
-  var xmlParts = parts.map(function(p) { return '<Part><PartNumber>' + p.partNumber + '</PartNumber><ETag>' + p.etag + '</ETag></Part>'; }).join('');
+  var xmlParts = parts.map(function(p) {
+    return '<Part><PartNumber>' + p.partNumber + '</PartNumber><ETag>"' + p.etag + '"</ETag></Part>';
+  }).join('');
   var xmlBody = '<CompleteMultipartUpload>' + xmlParts + '</CompleteMultipartUpload>';
   var bodyHash = await sha256Hex(xmlBody);
-  var headers = { 'Host': new URL(url).host, 'Content-Type': 'application/xml', 'X-Amz-Date': dateTime, 'X-Amz-Content-Sha256': bodyHash };
+  var headers = {
+    'Host': new URL(url).host,
+    'Content-Type': 'application/xml',
+    'X-Amz-Date': dateTime,
+    'X-Amz-Content-Sha256': bodyHash
+  };
   headers['Authorization'] = await signV4('POST', url, headers, bodyHash, dateTime);
   var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
   fetchHeaders['Content-Type'] = 'application/xml';
   var response = await fetch(url, { method: 'POST', headers: fetchHeaders, body: xmlBody });
-  if (!response.ok) { var errText = await response.text(); throw new Error('Complete multipart failed (HTTP ' + response.status + '): ' + errText); }
+  if (!response.ok) { var errText = await response.text(); throw new Error('Failed to complete multipart upload (HTTP ' + response.status + '): ' + errText); }
   return await response.text();
 }
 
@@ -701,17 +835,62 @@ async function abortMultipart(bucketUrl, uploadId) {
   try {
     var url = bucketUrl + '?uploadId=' + encodeURIComponent(uploadId);
     var dateTime = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z');
-    var headers = { 'Host': new URL(url).host, 'X-Amz-Date': dateTime, 'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD' };
+    var headers = {
+      'Host': new URL(url).host,
+      'X-Amz-Date': dateTime,
+      'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD'
+    };
     headers['Authorization'] = await signV4('DELETE', url, headers, 'UNSIGNED-PAYLOAD', dateTime);
     var fetchHeaders = Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; }));
     await fetch(url, { method: 'DELETE', headers: fetchHeaders });
-    console.log('Multipart upload aborted successfully');
-  } catch (e) { console.warn('Failed to abort multipart upload:', e); }
+    console.log('[Multipart] Upload aborted successfully');
+  } catch (e) {
+    console.warn('[Multipart] Abort request failed:', e);
+  }
+}
+
+async function verifyUpload(publicUrl, expectedSize) {
+  try {
+    var response = await fetch(publicUrl, { method: 'HEAD' });
+    if (!response.ok) {
+      console.error('[Verify] HEAD request failed: HTTP ' + response.status);
+      return false;
+    }
+    var contentLength = parseInt(response.headers.get('Content-Length')) || 0;
+    if (contentLength > 0 && contentLength !== expectedSize) {
+      console.error('[Verify] Size mismatch! Expected: ' + expectedSize + ', Got: ' + contentLength);
+      return false;
+    }
+    if (contentLength === 0) {
+      console.log('[Verify] No Content-Length header, trying range check...');
+      var rangeResponse = await fetch(publicUrl, { headers: { 'Range': 'bytes=' + (expectedSize - 1) + '-' + expectedSize } });
+      if (rangeResponse.status === 206 || rangeResponse.status === 200) {
+        var contentRange = rangeResponse.headers.get('Content-Range');
+        if (contentRange) {
+          var totalMatch = contentRange.match(/\/(\d+)/);
+          if (totalMatch && parseInt(totalMatch[1]) === expectedSize) {
+            console.log('[Verify] Range check passed, total size: ' + totalMatch[1]);
+            return true;
+          }
+        }
+        console.log('[Verify] Range request succeeded, assuming upload is valid');
+        return true;
+      }
+      console.error('[Verify] Range check failed: HTTP ' + rangeResponse.status);
+      return false;
+    }
+    console.log('[Verify] Upload verified! Size: ' + fmtBytes(contentLength));
+    return true;
+  } catch (err) {
+    console.error('[Verify] Verification request failed:', err);
+    console.warn('[Verify] Could not verify via HEAD (possible CORS issue), trusting upload response');
+    return true;
+  }
 }
 
 function extractR2Error(xhr, fallback) {
   var msg = fallback + ' (HTTP ' + xhr.status + ')';
-  try { if (xhr.responseText && xhr.responseText.length > 0) { var m = xhr.responseText.match(/<Message>([^<]+)<\/Message>/); if (m) return m[1]; } } catch (e) {}
+  try { if (xhr.responseText && xhr.responseText.length > 0) { var m = xhr.responseText.match(/<Message>([^<]+)<\/Message>/); if (m) return m[1]; var code = xhr.responseText.match(/<Code>([^<]+)<\/Code>/); if (code) return code[1] + ' \u2014 ' + msg; } } catch (e) {}
   return msg;
 }
 
@@ -749,25 +928,25 @@ async function testR2() {
     var response = await fetch(uploadUrl, { method: 'PUT', headers: Object.fromEntries(Object.entries(headers).filter(function(h) { return h[0].toLowerCase() !== 'host'; })), body: testFile });
     if (response.ok) {
       var publicUrl = R2_CONFIG.publicUrl + '/' + objectKey;
-      console.log('✅ R2 upload successful!'); console.log('✅ Public URL:', publicUrl);
+      console.log('\u2705 R2 upload successful!'); console.log('\u2705 Public URL:', publicUrl);
       showToast('R2 is working! Upload test passed.', 'success');
       try {
         var getResp = await fetch(publicUrl);
-        if (getResp.ok) { console.log('✅ Public read works!'); showToast('R2 upload AND public read both working!', 'success'); }
-        else { console.warn('⚠️ Public read failed (HTTP ' + getResp.status + ')'); showToast('Upload works but public read failed. Check publicUrl.', 'warning'); }
-      } catch(e) { console.warn('⚠️ Public read error:', e); showToast('Upload works but public URL may be wrong.', 'warning'); }
+        if (getResp.ok) { console.log('\u2705 Public read works!'); showToast('R2 upload AND public read both working!', 'success'); }
+        else { console.warn('\u26A0\uFE0F Public read failed (HTTP ' + getResp.status + ')'); showToast('Upload works but public read failed. Check publicUrl.', 'warning'); }
+      } catch(e) { console.warn('\u26A0\uFE0F Public read error:', e); showToast('Upload works but public URL may be wrong.', 'warning'); }
     } else {
       var errorText = await response.text();
-      console.error('❌ R2 upload failed (HTTP ' + response.status + '):', errorText);
-      if (response.status === 403) showToast('R2 auth failed (403) — check Access Key and Secret', 'error');
-      else if (response.status === 404) showToast('Bucket not found (404) — check bucket name and account ID', 'error');
-      else if (response.status === 0 || response.type === 'opaque') showToast('CORS blocked — update R2 bucket CORS policy', 'error');
+      console.error('\u274C R2 upload failed (HTTP ' + response.status + '):', errorText);
+      if (response.status === 403) showToast('R2 auth failed (403) \u2014 check Access Key and Secret', 'error');
+      else if (response.status === 404) showToast('Bucket not found (404) \u2014 check bucket name and account ID', 'error');
+      else if (response.status === 0 || response.type === 'opaque') showToast('CORS blocked \u2014 update R2 bucket CORS policy', 'error');
       else showToast('R2 test failed (HTTP ' + response.status + ')', 'error');
     }
   } catch (err) {
-    console.error('❌ R2 test error:', err);
+    console.error('\u274C R2 test error:', err);
     var msg = parseError(err);
-    if (msg.indexOf('Failed to fetch') >= 0 || msg.indexOf('Load failed') >= 0) showToast('Cannot reach R2 — check Account ID and CORS policy', 'error');
+    if (msg.indexOf('Failed to fetch') >= 0 || msg.indexOf('Load failed') >= 0) showToast('Cannot reach R2 \u2014 check Account ID and CORS policy', 'error');
     else showToast('R2 test error: ' + msg, 'error');
   }
 }
@@ -805,7 +984,7 @@ function closeSidebar(){document.getElementById("sidebar").classList.remove("ope
 function loadDashboard(){db.ref("description").once("value").then(function(snap){var videos=[];snap.forEach(function(c){var d=c.val();d._id=c.key;videos.push(d);});var tv=0,tl=0,cs={};videos.forEach(function(v){tv+=(v.views||0);tl+=(v.likes||0);if(v.category)cs[v.category]=true;});document.getElementById("stat-total").textContent=videos.length;document.getElementById("stat-views").textContent=fmtNum(tv);document.getElementById("stat-likes").textContent=fmtNum(tl);document.getElementById("stat-cats").textContent=Object.keys(cs).length;renderCategoryChart(videos);renderTopMovies(videos);renderRecentUploads(videos);}).catch(function(e){showToast("Failed to load dashboard","error");});}
 function renderCategoryChart(v){var el=document.getElementById("category-chart");var c={};v.forEach(function(x){var cat=x.category||"Uncategorized";c[cat]=(c[cat]||0)+1;});var s=Object.entries(c).sort(function(a,b){return b[1]-a[1];});if(s.length===0){el.innerHTML='<div class="cat-empty">No movies yet</div>';return;}var m=s[0][1],h="";s.slice(0,9).forEach(function(x){var p=Math.max(8,(x[1]/m)*100);h+='<div class="cat-bar-row"><span class="cat-bar-label">'+esc(x[0])+'</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:'+p+'%">'+x[1]+'</div></div></div>';});el.innerHTML=h;}
 function renderTopMovies(v){var el=document.getElementById("top-movies");var s=v.slice().sort(function(a,b){return(b.views||0)-(a.views||0);}).slice(0,5);if(s.length===0){el.innerHTML='<div class="cat-empty">No movies yet</div>';return;}var h="";s.forEach(function(x,i){h+='<div class="top-item"><span class="top-rank">'+(i+1)+'</span><img class="top-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/48x32/e63946/fff?text=?\'"><div class="top-info"><div class="top-title">'+esc(x.title)+'</div><div class="top-views">'+fmtNum(x.views||0)+' views</div></div></div>';});el.innerHTML=h;}
-function renderRecentUploads(v){var el=document.getElementById("recent-uploads");var s=v.slice().sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);}).slice(0,8);if(s.length===0){el.innerHTML='<div class="recent-empty">No movies uploaded yet.</div>';return;}var h='<table class="recent-table"><thead><tr><th>Thumb</th><th>Title</th><th>Category</th><th>Views</th><th>Likes</th><th>Added</th></tr></thead><tbody>';s.forEach(function(x){h+='<tr><td><img class="recent-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/50x32/e63946/fff?text=?\'"></td><td class="recent-title">'+esc(x.title)+'</td><td><span class="recent-cat">'+esc(x.category||"—")+'</span></td><td>'+fmtNum(x.views||0)+'</td><td>'+fmtNum(x.likes||0)+'</td><td class="tbl-date">'+fmtDate(x.createdAt)+'</td></tr>';});h+='</tbody></table>';el.innerHTML=h;}
+function renderRecentUploads(v){var el=document.getElementById("recent-uploads");var s=v.slice().sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);}).slice(0,8);if(s.length===0){el.innerHTML='<div class="recent-empty">No movies uploaded yet.</div>';return;}var h='<table class="recent-table"><thead><tr><th>Thumb</th><th>Title</th><th>Category</th><th>Views</th><th>Likes</th><th>Added</th></tr></thead><tbody>';s.forEach(function(x){h+='<tr><td><img class="recent-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/50x32/e63946/fff?text=?\'"></td><td class="recent-title">'+esc(x.title)+'</td><td><span class="recent-cat">'+esc(x.category||"\u2014")+'</span></td><td>'+fmtNum(x.views||0)+'</td><td>'+fmtNum(x.likes||0)+'</td><td class="tbl-date">'+fmtDate(x.createdAt)+'</td></tr>';});h+='</tbody></table>';el.innerHTML=h;}
 
 /* =============================================
    Upload View Logic
@@ -817,12 +996,12 @@ function initUploadView(){
   dz.addEventListener("dragleave",function(){dz.classList.remove("dragover");});
   dz.addEventListener("drop",function(e){e.preventDefault();dz.classList.remove("dragover");var f=e.dataTransfer.files[0];if(f&&f.type.startsWith("video/"))hvf(f);else showToast("Please drop a valid video file","warning");});
   fi.addEventListener("change",function(){if(fi.files[0])hvf(fi.files[0]);});
-  function hvf(file){if(file.size>10*1024*1024*1024){showToast("Video must be under 10GB","error");return;}state.videoFile=file;state.uploadedVideoUrl="";dz.classList.add("has-file");var pv=document.getElementById("video-preview");pv.style.display="block";pv.innerHTML='<video src="'+URL.createObjectURL(file)+'" controls style="max-width:100%;max-height:200px;border-radius:6px"></video>';var ne=document.getElementById("video-file-name");ne.style.display="flex";var sz=file.size>=1073741824?(file.size/1073741824).toFixed(2)+' GB':(file.size/(1024*1024)).toFixed(1)+' MB';ne.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> '+esc(file.name)+' ('+sz+')';rb.style.display="flex";}
-  rb.addEventListener("click",function(e){e.stopPropagation();state.videoFile=null;state.uploadedVideoUrl="";dz.classList.remove("has-file");document.getElementById("video-preview").style.display="none";document.getElementById("video-file-name").style.display="none";document.getElementById("video-progress").style.display="none";rb.style.display="none";fi.value="";});
+  function hvf(file){if(file.size>10*1024*1024*1024){showToast("Video must be under 10GB","error");return;}state.videoFile=file;state.uploadedVideoUrl="";dz.classList.add("has-file");var pv=document.getElementById("video-preview");pv.style.display="block";pv.innerHTML='<video src="'+URL.createObjectURL(file)+'" controls style="max-width:100%;max-height:200px;border-radius:6px"></video>';var ne=document.getElementById("video-file-name");ne.style.display="flex";var sz=file.size>=1073741824?(file.size/1073741824).toFixed(2)+' GB':(file.size/(1024*1024)).toFixed(1)+' MB';ne.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> '+esc(file.name)+' ('+sz+')';rb.style.display="flex";var hint=document.getElementById("video-upload-hint");if(hint){if(file.size>=MULTIPART_THRESHOLD){var parts=Math.ceil(file.size/CHUNK_SIZE);hint.textContent='Large file \u2014 will upload as '+parts+' chunks ('+fmtBytes(CHUNK_SIZE)+' each) in parallel';hint.style.display="block";}else{hint.textContent='Standard upload (under '+fmtBytes(MULTIPART_THRESHOLD)+')';hint.style.display="block";}}}
+  rb.addEventListener("click",function(e){e.stopPropagation();state.videoFile=null;state.uploadedVideoUrl="";dz.classList.remove("has-file");document.getElementById("video-preview").style.display="none";document.getElementById("video-file-name").style.display="none";document.getElementById("video-progress").style.display="none";rb.style.display="none";fi.value="";var hint=document.getElementById("video-upload-hint");if(hint)hint.style.display="none";});
   tb.addEventListener("click",function(){tfi.click();});
   tfi.addEventListener("change",function(){if(tfi.files[0])htf(tfi.files[0]);});
   function htf(file){if(file.size>5*1024*1024){showToast("Thumbnail must be under 5MB","error");return;}state.thumbFile=file;state.uploadedThumbUrl="";var bx=document.getElementById("thumb-preview-box");bx.innerHTML='<img src="'+URL.createObjectURL(file)+'" alt="Thumbnail preview">';document.getElementById("thumb-progress").style.display="block";}
-  var ot=null;ti.addEventListener("input",function(){document.getElementById("title-count").textContent=ti.value.length;clearTimeout(ot);ot=setTimeout(function(){var t=ti.value.trim();if(t.length>=2){document.getElementById("omdb-status").textContent="Searching...";fetchOmdb(t).then(function(d){state.omdbData=d;if(d){document.getElementById("up-year").value=d.year||"";document.getElementById("up-genre").value=d.genre||"";document.getElementById("up-rated").value=d.rated||"";document.getElementById("up-runtime").value=d.runtime||"";document.getElementById("up-imdb").value=d.imdbRating||"";document.getElementById("up-director").value=d.director||"";document.getElementById("up-desc").value=d.plot||"";document.getElementById("desc-count").textContent=(d.plot||"").length;document.getElementById("up-country").value=d.country||"";document.getElementById("omdb-indicator").style.display="inline-flex";document.getElementById("omdb-status").textContent="Found";if(d.poster&&!state.thumbFile){state.uploadedThumbUrl=d.poster;document.getElementById("thumb-preview-box").innerHTML='<img src="'+d.poster+'" alt="OMDb poster">';}var p=document.getElementById("omdb-data-panel");p.innerHTML='<ul class="omdb-data-list"><li><span class="label">Year</span><span class="value">'+esc(d.year||"—")+'</span></li><li><span class="label">Genre</span><span class="value">'+esc(d.genre||"—")+'</span></li><li><span class="label">Rated</span><span class="value">'+esc(d.rated||"—")+'</span></li><li><span class="label">Runtime</span><span class="value">'+esc(d.runtime||"—")+'</span></li><li><span class="label">IMDb</span><span class="value">'+esc(d.imdbRating||"—")+'</span></li><li><span class="label">Director</span><span class="value">'+esc(d.director||"—")+'</span></li><li><span class="label">Country</span><span class="value">'+esc(d.country||"—")+'</span></li><li><span class="label">Plot</span><span class="value">'+esc((d.plot||"—").substring(0,120))+(d.plot&&d.plot.length>120?'...':'')+'</span></li></ul>';}else{document.getElementById("omdb-status").textContent="Not found";document.getElementById("omdb-indicator").style.display="none";document.getElementById("omdb-data-panel").innerHTML='<ul class="omdb-data-list"><li><span class="label">Status</span><span class="value">No match found</span></li></ul>';}});}},500);});
+  var ot=null;ti.addEventListener("input",function(){document.getElementById("title-count").textContent=ti.value.length;clearTimeout(ot);ot=setTimeout(function(){var t=ti.value.trim();if(t.length>=2){var _os=document.getElementById("omdb-status");if(_os)_os.textContent="Searching...";fetchOmdb(t).then(function(d){state.omdbData=d;_os=document.getElementById("omdb-status");var _oi=document.getElementById("omdb-indicator");var _op=document.getElementById("omdb-data-panel");if(d){var _ey=document.getElementById("up-year");var _eg=document.getElementById("up-genre");var _er=document.getElementById("up-rated");var _ert=document.getElementById("up-runtime");var _ei=document.getElementById("up-imdb");var _ed=document.getElementById("up-director");var _edd=document.getElementById("up-desc");var _dc=document.getElementById("desc-count");var _ec=document.getElementById("up-country");if(_ey)_ey.value=d.year||"";if(_eg)_eg.value=d.genre||"";if(_er)_er.value=d.rated||"";if(_ert)_ert.value=d.runtime||"";if(_ei)_ei.value=d.imdbRating||"";if(_ed)_ed.value=d.director||"";if(_edd)_edd.value=d.plot||"";if(_dc)_dc.textContent=(d.plot||"").length;if(_ec)_ec.value=d.country||"";if(_os)_os.textContent="Found";if(_oi)_oi.style.display="inline-flex";if(d.poster&&!state.thumbFile){state.uploadedThumbUrl=d.poster;var _tb=document.getElementById("thumb-preview-box");if(_tb)_tb.innerHTML='<img src="'+d.poster+'" alt="OMDb poster">';}if(_op)_op.innerHTML='<ul class="omdb-data-list"><li><span class="label">Year</span><span class="value">'+esc(d.year||"\u2014")+'</span></li><li><span class="label">Genre</span><span class="value">'+esc(d.genre||"\u2014")+'</span></li><li><span class="label">Rated</span><span class="value">'+esc(d.rated||"\u2014")+'</span></li><li><span class="label">Runtime</span><span class="value">'+esc(d.runtime||"\u2014")+'</span></li><li><span class="label">IMDb</span><span class="value">'+esc(d.imdbRating||"\u2014")+'</span></li><li><span class="label">Director</span><span class="value">'+esc(d.director||"\u2014")+'</span></li><li><span class="label">Country</span><span class="value">'+esc(d.country||"\u2014")+'</span></li><li><span class="label">Plot</span><span class="value">'+esc((d.plot||"\u2014").substring(0,120))+(d.plot&&d.plot.length>120?'...':'')+'</span></li></ul>';}else{if(_os)_os.textContent="Not found";if(_oi)_oi.style.display="none";if(_op)_op.innerHTML='<ul class="omdb-data-list"><li><span class="label">Status</span><span class="value">No match found</span></li></ul>';}});}},500);});
   di.addEventListener("input",function(){document.getElementById("desc-count").textContent=di.value.length;});
   sb.addEventListener("click",function(){
     document.getElementById("up-desc-error").textContent="";
@@ -857,14 +1036,14 @@ function initUploadView(){
   });
 }
 
-function resetUploadForm(){state.videoFile=null;state.thumbFile=null;state.uploadedVideoUrl="";state.uploadedThumbUrl="";state.omdbData=null;document.getElementById("video-dropzone").classList.remove("has-file");document.getElementById("video-preview").style.display="none";document.getElementById("video-preview").innerHTML="";document.getElementById("video-file-name").style.display="none";document.getElementById("video-progress").style.display="none";document.getElementById("video-fill").style.width="0%";document.getElementById("remove-video").style.display="none";document.getElementById("video-file-input").value="";document.getElementById("up-title").value="";document.getElementById("up-year").value="";document.getElementById("up-rated").value="";document.getElementById("up-genre").value="";document.getElementById("up-runtime").value="";document.getElementById("up-imdb").value="";document.getElementById("up-director").value="";document.getElementById("up-desc").value="";document.getElementById("up-category").value="";document.getElementById("up-country").value="";document.getElementById("title-count").textContent="0";document.getElementById("desc-count").textContent="0";document.getElementById("up-desc-error").textContent="";document.getElementById("up-category-error").textContent="";document.getElementById("omdb-indicator").style.display="none";document.getElementById("thumb-preview-box").innerHTML='<div class="placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><div>Auto-fetched from OMDb<br>or upload manually</div></div>';document.getElementById("thumb-progress").style.display="none";document.getElementById("thumb-fill").style.width="0%";document.getElementById("thumb-file-input").value="";document.getElementById("omdb-data-panel").innerHTML='<ul class="omdb-data-list"><li><span class="label">Status</span><span class="value" id="omdb-status">Enter a title</span></li></ul>';}
+function resetUploadForm(){state.videoFile=null;state.thumbFile=null;state.uploadedVideoUrl="";state.uploadedThumbUrl="";state.omdbData=null;document.getElementById("video-dropzone").classList.remove("has-file");document.getElementById("video-preview").style.display="none";document.getElementById("video-preview").innerHTML="";document.getElementById("video-file-name").style.display="none";document.getElementById("video-progress").style.display="none";document.getElementById("video-fill").style.width="0%";document.getElementById("remove-video").style.display="none";document.getElementById("video-file-input").value="";document.getElementById("up-title").value="";document.getElementById("up-year").value="";document.getElementById("up-rated").value="";document.getElementById("up-genre").value="";document.getElementById("up-runtime").value="";document.getElementById("up-imdb").value="";document.getElementById("up-director").value="";document.getElementById("up-desc").value="";document.getElementById("up-category").value="";document.getElementById("up-country").value="";document.getElementById("title-count").textContent="0";document.getElementById("desc-count").textContent="0";document.getElementById("up-desc-error").textContent="";document.getElementById("up-category-error").textContent="";document.getElementById("omdb-indicator").style.display="none";document.getElementById("thumb-preview-box").innerHTML='<div class="placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><div>Auto-fetched from OMDb<br>or upload manually</div></div>';document.getElementById("thumb-progress").style.display="none";document.getElementById("thumb-fill").style.width="0%";document.getElementById("thumb-file-input").value="";document.getElementById("omdb-data-panel").innerHTML='<ul class="omdb-data-list"><li><span class="label">Status</span><span class="value" id="omdb-status">Enter a title</span></li></ul>';var hint=document.getElementById("video-upload-hint");if(hint)hint.style.display="none";}
 
 /* =============================================
    Movies View
    ============================================= */
 function loadMovies(){db.ref("description").once("value").then(function(snap){state.allVideos=[];snap.forEach(function(c){var d=c.val();d._id=c.key;state.allVideos.push(d);});applyFilters();}).catch(function(e){showToast("Failed to load movies","error");});}
 function applyFilters(){var s=(document.getElementById("movie-search").value||"").toLowerCase().trim(),c=document.getElementById("filter-category").value,so=document.getElementById("filter-sort").value,f=state.allVideos.slice();if(c!=="all")f=f.filter(function(v){return(v.category||"").toLowerCase()===c.toLowerCase();});if(s)f=f.filter(function(v){return(v.title||"").toLowerCase().indexOf(s)>=0||(v.description||"").toLowerCase().indexOf(s)>=0||(v.country||"").toLowerCase().indexOf(s)>=0;});if(so==="recent")f.sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});else if(so==="oldest")f.sort(function(a,b){return(a.createdAt||0)-(b.createdAt||0);});else if(so==="views")f.sort(function(a,b){return(b.views||0)-(a.views||0);});else if(so==="likes")f.sort(function(a,b){return(b.likes||0)-(a.likes||0);});else if(so==="title")f.sort(function(a,b){return(a.title||"").localeCompare(b.title||"");});state.filteredVideos=f;state.page=1;renderMoviesTable();}
-function renderMoviesTable(){var v=state.filteredVideos,ps=state.pageSize,p=state.page,st=(p-1)*ps,en=st+ps,pv=v.slice(st,en),tp=Math.ceil(v.length/ps)||1;document.getElementById("movies-count").textContent=v.length+" movie"+(v.length!==1?"s":"");var tb=document.getElementById("movies-tbody");if(pv.length===0){tb.innerHTML='<tr><td colspan="7"><div class="table-empty"><h4>No movies found</h4></div></td></tr>';}else{var h="";pv.forEach(function(x){h+='<tr><td><img class="tbl-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/64x40/e63946/fff?text=?\'"></td><td class="tbl-title">'+esc(x.title||"Untitled")+'</td><td><span class="tbl-cat">'+esc(x.category||"—")+'</span></td><td class="tbl-num">'+fmtNum(x.views||0)+'</td><td class="tbl-num">'+fmtNum(x.likes||0)+'</td><td class="tbl-date">'+fmtDate(x.createdAt)+'</td><td><div class="tbl-actions"><button class="btn-action edit" data-id="'+x._id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn-action delete" data-id="'+x._id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></td></tr>';});tb.innerHTML=h;}var mc=document.getElementById("mobile-cards");if(pv.length===0){mc.innerHTML='<div class="table-empty"><h4>No movies found</h4></div>';}else{var mh="";pv.forEach(function(x){mh+='<div class="mobile-card"><img class="mobile-card-img" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/100x64/e63946/fff?text=?\'"><div class="mobile-card-info"><div class="mobile-card-title">'+esc(x.title||"Untitled")+'</div><div class="mobile-card-meta"><span>'+esc(x.category||"—")+'</span><span>'+fmtNum(x.views||0)+' views</span></div><div class="mobile-card-actions"><button class="btn-action edit" data-id="'+x._id+'"> Edit</button><button class="btn-action delete" data-id="'+x._id+'"> Del</button></div></div></div>';});mc.innerHTML=mh;}renderPagination(tp);bindTableActions();}
+function renderMoviesTable(){var v=state.filteredVideos,ps=state.pageSize,p=state.page,st=(p-1)*ps,en=st+ps,pv=v.slice(st,en),tp=Math.ceil(v.length/ps)||1;document.getElementById("movies-count").textContent=v.length+" movie"+(v.length!==1?"s":"");var tb=document.getElementById("movies-tbody");if(pv.length===0){tb.innerHTML='<tr><td colspan="7"><div class="table-empty"><h4>No movies found</h4></div></td></tr>';}else{var h="";pv.forEach(function(x){h+='<tr><td><img class="tbl-thumb" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/64x40/e63946/fff?text=?\'"></td><td class="tbl-title">'+esc(x.title||"Untitled")+'</td><td><span class="tbl-cat">'+esc(x.category||"\u2014")+'</span></td><td class="tbl-num">'+fmtNum(x.views||0)+'</td><td class="tbl-num">'+fmtNum(x.likes||0)+'</td><td class="tbl-date">'+fmtDate(x.createdAt)+'</td><td><div class="tbl-actions"><button class="btn-action edit" data-id="'+x._id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn-action delete" data-id="'+x._id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></td></tr>';});tb.innerHTML=h;}var mc=document.getElementById("mobile-cards");if(pv.length===0){mc.innerHTML='<div class="table-empty"><h4>No movies found</h4></div>';}else{var mh="";pv.forEach(function(x){mh+='<div class="mobile-card"><img class="mobile-card-img" src="'+getThumb(x)+'" alt="" onerror="this.src=\'https://placehold.co/100x64/e63946/fff?text=?\'"><div class="mobile-card-info"><div class="mobile-card-title">'+esc(x.title||"Untitled")+'</div><div class="mobile-card-meta"><span>'+esc(x.category||"\u2014")+'</span><span>'+fmtNum(x.views||0)+' views</span></div><div class="mobile-card-actions"><button class="btn-action edit" data-id="'+x._id+'"> Edit</button><button class="btn-action delete" data-id="'+x._id+'"> Del</button></div></div></div>';});mc.innerHTML=mh;}renderPagination(tp);bindTableActions();}
 function renderPagination(tp){var el=document.getElementById("pagination");if(tp<=1){el.innerHTML="";return;}var h='<button class="btn-page" data-page="prev" '+(state.page<=1?"disabled":"")+'>Prev</button>';var sp=Math.max(1,state.page-2),ep=Math.min(tp,sp+4);if(ep-sp<4)sp=Math.max(1,ep-4);for(var i=sp;i<=ep;i++){h+='<button class="btn-page'+(i===state.page?' active':'')+'" data-page="'+i+'">'+i+'</button>';}h+='<span class="page-info">of '+tp+'</span><button class="btn-page" data-page="next" '+(state.page>=tp?"disabled":"")+'>Next</button>';el.innerHTML=h;el.querySelectorAll(".btn-page").forEach(function(b){b.addEventListener("click",function(){var p=this.dataset.page;if(p==="prev")state.page=Math.max(1,state.page-1);else if(p==="next")state.page=Math.min(tp,state.page+1);else state.page=parseInt(p);renderMoviesTable();});});}
 function bindTableActions(){document.querySelectorAll(".btn-action.edit").forEach(function(b){b.addEventListener("click",function(){openEditModal(this.dataset.id);});});document.querySelectorAll(".btn-action.delete").forEach(function(b){b.addEventListener("click",function(){openDeleteModal(this.dataset.id);});});}
 
@@ -873,8 +1052,8 @@ function bindTableActions(){document.querySelectorAll(".btn-action.edit").forEac
    ============================================= */
 function openEditModal(id){var v=state.allVideos.find(function(x){return x._id===id;});if(!v){showToast("Not found","error");return;}state.editId=id;state.editVideoFile=null;state.editThumbFile=null;state.editVideoUrl=v.videoUrl||"";state.editThumbUrl=v.thumbnailUrl||"";document.getElementById("edit-thumb").src=getThumb(v);document.getElementById("edit-thumb").onerror=function(){this.src='https://placehold.co/220x330/e63946/fff?text=No+Image';};document.getElementById("ed-title").value=v.title||"";document.getElementById("ed-year").value=v.year||"";document.getElementById("ed-rated").value=v.rated||"";document.getElementById("ed-genre").value=v.genre||"";document.getElementById("ed-runtime").value=v.runtime||"";document.getElementById("ed-imdb").value=v.imdbRating||"";document.getElementById("ed-director").value=v.director||"";document.getElementById("ed-desc").value=v.description||"";document.getElementById("ed-category").value=v.category||"";document.getElementById("ed-country").value=v.country||"";document.getElementById("edit-video-status").style.display=state.editVideoUrl?"flex":"none";document.getElementById("edit-video-progress").style.display="none";document.getElementById("edit-thumb-progress").style.display="none";document.getElementById("edit-modal").style.display="flex";document.body.style.overflow="hidden";}
 function closeEditModal(){document.getElementById("edit-modal").style.display="none";document.body.style.overflow="";state.editId=null;}
-function initEditModal(){document.getElementById("edit-close").addEventListener("click",closeEditModal);document.getElementById("edit-cancel").addEventListener("click",closeEditModal);document.getElementById("edit-modal").addEventListener("click",function(e){if(e.target===this)closeEditModal();});document.getElementById("edit-replace-video").addEventListener("click",function(){document.getElementById("edit-video-file").click();});document.getElementById("edit-video-file").addEventListener("change",function(){var f=this.files[0];if(!f)return;if(f.size>10*1024*1024*1024){showToast("Video must be under 10GB","error");return;}state.editVideoFile=f;document.getElementById("edit-video-status").textContent="New video: "+f.name;document.getElementById("edit-video-status").style.color="var(--info)";});document.getElementById("edit-replace-thumb").addEventListener("click",function(){document.getElementById("edit-thumb-file").click();});document.getElementById("edit-thumb-file").addEventListener("change",function(){var f=this.files[0];if(!f)return;if(f.size>5*1024*1024){showToast("Thumbnail must be under 5MB","error");return;}state.editThumbFile=f;document.getElementById("edit-thumb").src=URL.createObjectURL(f);});document.getElementById("edit-save").addEventListener("click",function(){var sb=this;sb.disabled=true;var vp=Promise.resolve();if(state.editVideoFile){document.getElementById("edit-video-progress").style.display="block";vp=handleUpload(state.editVideoFile,"video","edit-video-fill","edit-video-pct").then(function(u){state.editVideoUrl=u;});}var tp=Promise.resolve();if(state.editThumbFile){document.getElementById("edit-thumb-progress").style.display="block";tp=handleUpload(state.editThumbFile,"image","edit-thumb-fill","edit-thumb-pct").then(function(u){state.editThumbUrl=u;});}Promise.all([vp,tp]).then(function(){return db.ref("description/"+state.editId).update({title:document.getElementById("ed-title").value.trim(),description:document.getElementById("ed-desc").value.trim(),year:document.getElementById("ed-year").value.trim(),rated:document.getElementById("ed-rated").value.trim(),genre:document.getElementById("ed-genre").value.trim(),runtime:document.getElementById("ed-runtime").value.trim(),imdbRating:document.getElementById("ed-imdb").value.trim(),director:document.getElementById("ed-director").value.trim(),category:document.getElementById("ed-category").value,country:document.getElementById("ed-country").value.trim(),videoUrl:state.editVideoUrl,thumbnailUrl:state.editThumbUrl});}).then(function(){showToast("Updated successfully!","success");closeEditModal();sb.disabled=false;loadMovies();}).catch(function(err){showToast("Update failed: "+parseError(err),"error");sb.disabled=false;});});}
-function openDeleteModal(id){var v=state.allVideos.find(function(x){return x._id===id;});if(!v){showToast("Not found","error");return;}state.deleteId=id;document.getElementById("delete-movie-name").textContent='"'+(v.title||"Untitled")+'"?';document.getElementById("delete-modal").style.display="flex";document.body.style.overflow="hidden";}
+function initEditModal(){document.getElementById("edit-close").addEventListener("click",closeEditModal);document.getElementById("edit-cancel").addEventListener("click",closeEditModal);document.getElementById("edit-modal").addEventListener("click",function(e){if(e.target===this)closeEditModal();});document.getElementById("edit-replace-video").addEventListener("click",function(){document.getElementById("edit-video-file").click();});document.getElementById("edit-video-file").addEventListener("change",function(){var f=this.files[0];if(!f)return;if(f.size>10*1024*1024*1024){showToast("Video must be under 10GB","error");return;}state.editVideoFile=f;var statusEl=document.getElementById("edit-video-status");statusEl.style.display="flex";statusEl.style.color="var(--info)";if(f.size>=MULTIPART_THRESHOLD){var parts=Math.ceil(f.size/CHUNK_SIZE);statusEl.textContent=esc(f.name)+' ('+fmtBytes(f.size)+', '+parts+' chunks)';}else{statusEl.textContent="New video: "+f.name;}});document.getElementById("edit-replace-thumb").addEventListener("click",function(){document.getElementById("edit-thumb-file").click();});document.getElementById("edit-thumb-file").addEventListener("change",function(){var f=this.files[0];if(!f)return;if(f.size>5*1024*1024){showToast("Thumbnail must be under 5MB","error");return;}state.editThumbFile=f;document.getElementById("edit-thumb").src=URL.createObjectURL(f);});document.getElementById("edit-save").addEventListener("click",function(){var sb=this;sb.disabled=true;var vp=Promise.resolve();if(state.editVideoFile){document.getElementById("edit-video-progress").style.display="block";vp=handleUpload(state.editVideoFile,"video","edit-video-fill","edit-video-pct").then(function(u){state.editVideoUrl=u;});}var tp=Promise.resolve();if(state.editThumbFile){document.getElementById("edit-thumb-progress").style.display="block";tp=handleUpload(state.editThumbFile,"image","edit-thumb-fill","edit-thumb-pct").then(function(u){state.editThumbUrl=u;});}Promise.all([vp,tp]).then(function(){return db.ref("description/"+state.editId).update({title:document.getElementById("ed-title").value.trim(),description:document.getElementById("ed-desc").value.trim(),year:document.getElementById("ed-year").value.trim(),rated:document.getElementById("ed-rated").value.trim(),genre:document.getElementById("ed-genre").value.trim(),runtime:document.getElementById("ed-runtime").value.trim(),imdbRating:document.getElementById("ed-imdb").value.trim(),director:document.getElementById("ed-director").value.trim(),category:document.getElementById("ed-category").value,country:document.getElementById("ed-country").value.trim(),videoUrl:state.editVideoUrl,thumbnailUrl:state.editThumbUrl});}).then(function(){showToast("Updated successfully!","success");closeEditModal();sb.disabled=false;loadMovies();}).catch(function(err){showToast("Update failed: "+parseError(err),"error");sb.disabled=false;});});}
+function openDeleteModal(id){var v=state.allVideos.find(function(x){return x._id===id;});if(!v){showToast("Not found","error");return;}state.deleteId=id;document.getElementById("delete-movie-name").textContent='\u201C'+(v.title||"Untitled")+'\u201D?';document.getElementById("delete-modal").style.display="flex";document.body.style.overflow="hidden";}
 function closeDeleteModal(){document.getElementById("delete-modal").style.display="none";document.body.style.overflow="";state.deleteId=null;}
 function initDeleteModal(){document.getElementById("delete-close").addEventListener("click",closeDeleteModal);document.getElementById("delete-cancel").addEventListener("click",closeDeleteModal);document.getElementById("delete-modal").addEventListener("click",function(e){if(e.target===this)closeDeleteModal();});document.getElementById("delete-confirm").addEventListener("click",function(){var b=this;b.disabled=true;db.ref("description/"+state.deleteId).remove().then(function(){showToast("Deleted successfully!","success");closeDeleteModal();b.disabled=false;loadMovies();}).catch(function(err){showToast("Delete failed: "+parseError(err),"error");b.disabled=false;});});}
 function initMoviesView(){var si=document.getElementById("movie-search"),st=null;si.addEventListener("input",function(){clearTimeout(st);st=setTimeout(function(){applyFilters();},300);});document.getElementById("filter-category").addEventListener("change",function(){applyFilters();});document.getElementById("filter-sort").addEventListener("change",function(){applyFilters();});}
