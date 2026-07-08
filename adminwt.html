@@ -1,0 +1,3397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+
+<title>XSTREAM FILMS - Admin Dashboard</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+/* =============================================
+   CSS VARIABLES - Dark Streaming Theme
+   ============================================= */
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a25;
+  --bg-card: #16161f;
+  --bg-card-hover: #1c1c28;
+  --bg-input: #1e1e2a;
+  
+  --border-primary: #2a2a3a;
+  --border-secondary: #333345;
+  --border-accent: #e50914;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0b5;
+  --text-tertiary: #6a6a80;
+  --text-accent: #e50914;
+  
+  --accent-red: #e50914;
+  --accent-red-dark: #b20710;
+  --accent-red-glow: rgba(229, 9, 20, 0.3);
+  --accent-orange: #f59e0b;
+  --accent-green: #10b981;
+  --accent-blue: #3b82f6;
+  --accent-purple: #8b5cf6;
+  --accent-pink: #ec4899;
+  --accent-cyan: #06b6d4;
+  
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.6);
+  --shadow-glow: 0 0 20px var(--accent-red-glow);
+  
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  
+  --sidebar-width: 260px;
+  --header-height: 70px;
+  
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+}
+
+/* =============================================
+   RESET & BASE
+   ============================================= */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-secondary); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* =============================================
+   AUTH SCREEN
+   ============================================= */
+#auth-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+#auth-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+}
+
+.auth-logo {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.auth-logo h1 {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--accent-red);
+  text-shadow: 0 0 30px var(--accent-red-glow);
+}
+
+.auth-logo span {
+  color: var(--text-primary);
+  font-weight: 300;
+}
+
+.auth-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  box-shadow: var(--shadow-lg);
+}
+
+.auth-box h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.auth-box p {
+  color: var(--text-secondary);
+  margin-bottom: 30px;
+  font-size: 0.9rem;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--accent-red);
+  box-shadow: 0 0 0 3px var(--accent-red-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  width: 100%;
+  background: var(--accent-red);
+  color: white;
+  padding: 14px;
+  font-size: 1rem;
+}
+
+.btn-primary:hover {
+  background: var(--accent-red-dark);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.auth-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+  display: none;
+}
+
+.auth-error.show {
+  display: block;
+}
+
+/* =============================================
+   LAYOUT
+   ============================================= */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* =============================================
+   SIDEBAR
+   ============================================= */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--transition-normal);
+}
+
+.sidebar-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sidebar-logo {
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--accent-red);
+}
+
+.sidebar-logo span {
+  color: var(--text-primary);
+  font-weight: 300;
+  letter-spacing: 1px;
+}
+
+.sidebar-subtitle {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 12px;
+  overflow-y: auto;
+}
+
+.nav-section {
+  margin-bottom: 24px;
+}
+
+.nav-section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.nav-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--accent-red);
+  color: white;
+  box-shadow: 0 2px 10px var(--accent-red-glow);
+}
+
+.nav-item .material-icons-round {
+  font-size: 20px;
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--accent-red);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.nav-item.active .nav-badge {
+  background: rgba(255,255,255,0.25);
+}
+
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-red), var(--accent-purple));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+
+.btn-logout {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
+.btn-logout:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* =============================================
+   MAIN CONTENT
+   ============================================= */
+.main-content {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  height: var(--header-height);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+}
+
+.menu-toggle:hover {
+  background: var(--bg-tertiary);
+}
+
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 20px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  animation: pulse-dot 2s infinite;
+}
+
+.status-dot.error {
+  background: #ef4444;
+  animation: none;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.refresh-timer {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================
+   PAGE CONTENT
+   ============================================= */
+.page-content {
+  padding: 24px 30px;
+}
+
+.page-section {
+  display: none;
+}
+
+.page-section.active {
+  display: block;
+}
+
+/* =============================================
+   STATS CARDS
+   ============================================= */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--card-accent, var(--accent-red));
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.stat-card:hover {
+  border-color: var(--border-secondary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.stat-card-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-card-icon .material-icons-round {
+  font-size: 22px;
+}
+
+.stat-card-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card-change {
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-card-change.positive {
+  color: var(--accent-green);
+}
+
+.stat-card-change.negative {
+  color: #ef4444;
+}
+
+.stat-card-change.neutral {
+  color: var(--text-tertiary);
+}
+
+/* Icon color variants */
+.icon-red { background: rgba(229, 9, 20, 0.15); color: var(--accent-red); }
+.icon-blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+.icon-green { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+.icon-orange { background: rgba(245, 158, 11, 0.15); color: var(--accent-orange); }
+.icon-purple { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+.icon-pink { background: rgba(236, 72, 153, 0.15); color: var(--accent-pink); }
+.icon-cyan { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+
+/* =============================================
+   CARDS & PANELS
+   ============================================= */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title .material-icons-round {
+  font-size: 20px;
+  color: var(--text-tertiary);
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.card-body {
+  padding: 24px;
+}
+
+.card-body.no-padding {
+  padding: 0;
+}
+
+/* =============================================
+   CHARTS
+   ============================================= */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+}
+
+.chart-container.small {
+  height: 200px;
+}
+
+.chart-container.large {
+  height: 400px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.charts-grid .chart-full {
+  grid-column: 1 / -1;
+}
+
+/* =============================================
+   TABLES
+   ============================================= */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+}
+
+.data-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-tertiary);
+}
+
+.data-table td {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.data-table tr:hover td {
+  background: var(--bg-tertiary);
+}
+
+.data-table .title-cell {
+  color: var(--text-primary);
+  font-weight: 500;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =============================================
+   LIVE VIEWERS LIST
+   ============================================= */
+.live-viewers-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.viewer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  transition: background var(--transition-fast);
+}
+
+.viewer-item:last-child {
+  border-bottom: none;
+}
+
+.viewer-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.viewer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.viewer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.viewer-movie {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  display: flex;
+  gap: 12px;
+}
+
+.viewer-position {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================
+   MOVIE LIST / RANKINGS
+   ============================================= */
+.movie-rank-list {
+  list-style: none;
+}
+
+.movie-rank-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  transition: background var(--transition-fast);
+}
+
+.movie-rank-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.movie-rank-item:last-child {
+  border-bottom: none;
+}
+
+.rank-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.rank-number.top-1 { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+.rank-number.top-2 { background: linear-gradient(135deg, #9ca3af, #6b7280); color: white; }
+.rank-number.top-3 { background: linear-gradient(135deg, #b45309, #92400e); color: white; }
+
+.rank-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-stats {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  display: flex;
+  gap: 16px;
+}
+
+.rank-value {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.rank-value .number {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+}
+
+.rank-value .label {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+
+/* =============================================
+   LOADING & EMPTY STATES
+   ============================================= */
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--accent-red);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+}
+
+.empty-state .material-icons-round {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+/* =============================================
+   BADGES & TAGS
+   ============================================= */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-red { background: rgba(229, 9, 20, 0.15); color: var(--accent-red); }
+.badge-green { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+.badge-blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+.badge-orange { background: rgba(245, 158, 11, 0.15); color: var(--accent-orange); }
+.badge-purple { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+
+.device-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* =============================================
+   PROGRESS BAR
+   ============================================= */
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-red);
+  transition: width var(--transition-normal);
+}
+
+/* =============================================
+   SECURITY PAGE
+   ============================================= */
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.security-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 24px;
+}
+
+.security-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.security-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.security-stat:last-child {
+  border-bottom: none;
+}
+
+.security-stat-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.security-stat-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================
+   SETTINGS / FORM ELEMENTS
+   ============================================= */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+.setting-info h4 {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.setting-info p {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 26px;
+  transition: all var(--transition-fast);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text-tertiary);
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
+.toggle input:checked + .toggle-slider {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(22px);
+  background: white;
+}
+
+/* =============================================
+   TOAST NOTIFICATIONS
+   ============================================= */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toast {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-lg);
+  animation: toast-in 0.3s ease;
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.toast.toast-out {
+  animation: toast-out 0.3s ease forwards;
+}
+
+.toast-icon {
+  font-size: 20px;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.toast.success .toast-icon { color: var(--accent-green); }
+.toast.error .toast-icon { color: #ef4444; }
+.toast.warning .toast-icon { color: var(--accent-orange); }
+.toast.info .toast-icon { color: var(--accent-blue); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(40px); }
+}
+
+/* =============================================
+   RESPONSIVE
+   ============================================= */
+@media (max-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .header {
+    padding: 0 16px;
+  }
+
+  .page-content {
+    padding: 16px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .stat-card-value {
+    font-size: 1.5rem;
+  }
+
+  .security-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =============================================
+   ANIMATIONS
+   ============================================= */
+.fade-in {
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 99;
+}
+
+.sidebar-overlay.show {
+  display: block;
+}
+
+/* Number animation placeholder */
+[data-count] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Suspicious activity highlight */
+.suspicious-row {
+  background: rgba(239, 68, 68, 0.05) !important;
+}
+
+.suspicious-row td {
+  color: #ef4444 !important;
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================= 
+     AUTH SCREEN 
+     ============================================= -->
+<div id="auth-screen">
+  <div class="auth-container">
+    <div class="auth-logo">
+      <h1>XSTREAM <span>FILMS</span></h1>
+    </div>
+    <div class="auth-box">
+      <h2>Admin Dashboard</h2>
+      <p>Sign in to access watchtime analytics</p>
+      
+      <div id="auth-error" class="auth-error"></div>
+      
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="auth-email" class="form-input" placeholder="admin@xstream.com" autocomplete="email">
+      </div>
+      
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="auth-password" class="form-input" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      
+      <button id="auth-submit" class="btn btn-primary" onclick="handleLogin()">
+        <span class="material-icons-round" style="font-size:20px">login</span>
+        Sign In
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================= 
+     TOAST CONTAINER 
+     ============================================= -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- ============================================= 
+     SIDEBAR OVERLAY (Mobile) 
+     ============================================= -->
+<div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- ============================================= 
+     APP LAYOUT 
+     ============================================= -->
+<div class="app-layout" id="app-layout" style="display:none">
+  
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">XSTREAM <span>FILMS</span></div>
+      <div class="sidebar-subtitle">Admin Dashboard</div>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">Overview</div>
+        <a class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+          <span class="material-icons-round">dashboard</span>
+          Dashboard
+        </a>
+        <a class="nav-item" data-page="realtime" onclick="switchPage('realtime')">
+          <span class="material-icons-round">sensors</span>
+          Real-Time
+          <span class="nav-badge" id="live-badge">0</span>
+        </a>
+      </div>
+      
+      <div class="nav-section">
+        <div class="nav-section-title">Analytics</div>
+        <a class="nav-item" data-page="movies" onclick="switchPage('movies')">
+          <span class="material-icons-round">movie</span>
+          Movies
+        </a>
+        <a class="nav-item" data-page="trending" onclick="switchPage('trending')">
+          <span class="material-icons-round">trending_up</span>
+          Trending
+        </a>
+        <a class="nav-item" data-page="sessions" onclick="switchPage('sessions')">
+          <span class="material-icons-round">history</span>
+          Sessions
+        </a>
+      </div>
+      
+      <div class="nav-section">
+        <div class="nav-section-title">System</div>
+        <a class="nav-item" data-page="security" onclick="switchPage('security')">
+          <span class="material-icons-round">security</span>
+          Security
+        </a>
+        <a class="nav-item" data-page="settings" onclick="switchPage('settings')">
+          <span class="material-icons-round">settings</span>
+          Settings
+        </a>
+      </div>
+    </nav>
+    
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar">A</div>
+        <div class="user-details">
+          <div class="user-name" id="user-name">Admin</div>
+          <div class="user-role">Administrator</div>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()" title="Sign Out">
+          <span class="material-icons-round" style="font-size:20px">logout</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <button class="menu-toggle" onclick="toggleSidebar()">
+          <span class="material-icons-round">menu</span>
+        </button>
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+      </div>
+      <div class="header-right">
+        <div class="header-status">
+          <span class="status-dot" id="connection-dot"></span>
+          <span id="connection-status">Connected</span>
+        </div>
+        <div class="header-status">
+          <span class="material-icons-round" style="font-size:16px">schedule</span>
+          <span class="refresh-timer" id="refresh-timer">10s</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- PAGE SECTIONS -->
+    <div class="page-content">
+      
+      <!-- ========== DASHBOARD PAGE ========== -->
+      <section id="page-dashboard" class="page-section active fade-in">
+        
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+          <div class="stat-card" style="--card-accent: var(--accent-red)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Total Movies</span>
+              <div class="stat-card-icon icon-red">
+                <span class="material-icons-round">movie</span>
+              </div>
+            </div>
+            <div class="stat-card-value" data-count="totalMovies">0</div>
+            <div class="stat-card-change neutral">
+              <span class="material-icons-round" style="font-size:16px">database</span>
+              In database
+            </div>
+          </div>
+          
+          <div class="stat-card" style="--card-accent: var(--accent-blue)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Total Views</span>
+              <div class="stat-card-icon icon-blue">
+                <span class="material-icons-round">play_circle</span>
+              </div>
+            </div>
+            <div class="stat-card-value" data-count="totalViews">0</div>
+            <div class="stat-card-change neutral" id="views-change">
+              <span class="material-icons-round" style="font-size:16px">trending_up</span>
+              All time
+            </div>
+          </div>
+          
+          <div class="stat-card" style="--card-accent: var(--accent-green)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Watch Hours</span>
+              <div class="stat-card-icon icon-green">
+                <span class="material-icons-round">schedule</span>
+              </div>
+            </div>
+            <div class="stat-card-value" data-count="totalWatchHours">0</div>
+            <div class="stat-card-change neutral" id="hours-change">
+              <span class="material-icons-round" style="font-size:16px">trending_up</span>
+              All time
+            </div>
+          </div>
+          
+          <div class="stat-card" style="--card-accent: var(--accent-orange)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Active Viewers</span>
+              <div class="stat-card-icon icon-orange">
+                <span class="material-icons-round">visibility</span>
+              </div>
+            </div>
+            <div class="stat-card-value" data-count="activeViewers">0</div>
+            <div class="stat-card-change positive">
+              <span class="material-icons-round" style="font-size:16px">fiber_manual_record</span>
+              Live now
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="charts-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">show_chart</span>
+                Watch Hours (7 Days)
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="chart-weekly-hours"></canvas>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">donut_large</span>
+                Views by Device
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="chart-devices"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="charts-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">bar_chart</span>
+                Top 5 Most Watched
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container small">
+                <canvas id="chart-top-movies"></canvas>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">public</span>
+                Views by Country
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container small">
+                <canvas id="chart-countries"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Time Period Comparison -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">compare_arrows</span>
+              Period Comparison
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="chart-comparison"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========== REAL-TIME PAGE ========== -->
+      <section id="page-realtime" class="page-section fade-in">
+        
+        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr)">
+          <div class="stat-card" style="--card-accent: var(--accent-green)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Live Viewers</span>
+              <div class="stat-card-icon icon-green">
+                <span class="material-icons-round">sensors</span>
+              </div>
+            </div>
+            <div class="stat-card-value" id="rt-live-count">0</div>
+            <div class="stat-card-change positive">
+              <span class="material-icons-round" style="font-size:16px">fiber_manual_record</span>
+              Real-time
+            </div>
+          </div>
+          
+          <div class="stat-card" style="--card-accent: var(--accent-blue)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Movies Being Watched</span>
+              <div class="stat-card-icon icon-blue">
+                <span class="material-icons-round">live_tv</span>
+              </div>
+            </div>
+            <div class="stat-card-value" id="rt-movies-count">0</div>
+            <div class="stat-card-change neutral">
+              <span class="material-icons-round" style="font-size:16px">movie_filter</span>
+              Unique titles
+            </div>
+          </div>
+          
+          <div class="stat-card" style="--card-accent: var(--accent-purple)">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Peak Today</span>
+              <div class="stat-card-icon icon-purple">
+                <span class="material-icons-round">speed</span>
+              </div>
+            </div>
+            <div class="stat-card-value" id="rt-peak">0</div>
+            <div class="stat-card-change neutral">
+              <span class="material-icons-round" style="font-size:16px">trending_up</span>
+              Concurrent
+            </div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">timeline</span>
+                Live Viewer Count
+              </div>
+              <span class="badge badge-green">
+                <span class="material-icons-round" style="font-size:14px">fiber_manual_record</span>
+                LIVE
+              </span>
+            </div>
+            <div class="card-body">
+              <div class="chart-container large">
+                <canvas id="chart-live-viewers"></canvas>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">pie_chart</span>
+                Currently Watching
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container large">
+                <canvas id="chart-currently-watching"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">people</span>
+              Active Viewers
+            </div>
+            <span class="badge badge-blue" id="viewer-count-badge">0 viewers</span>
+          </div>
+          <div class="card-body no-padding">
+            <div class="live-viewers-list" id="live-viewers-list">
+              <div class="loading-spinner">
+                <div class="spinner"></div>
+                <span>Connecting to live feed...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== MOVIES PAGE ========== -->
+      <section id="page-movies" class="page-section fade-in">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">movie_filter</span>
+              Movie Analytics
+            </div>
+            <div class="card-actions">
+              <input type="text" id="movie-search" class="form-input" placeholder="Search movies..." style="width:250px;padding:8px 12px;font-size:0.85rem" oninput="filterMovies()">
+            </div>
+          </div>
+          <div class="card-body no-padding">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Movie</th>
+                    <th>Views</th>
+                    <th>Watch Hours</th>
+                    <th>Unique Viewers</th>
+                    <th>Completion Rate</th>
+                    <th>Last Watched</th>
+                  </tr>
+                </thead>
+                <tbody id="movies-table-body">
+                  <tr>
+                    <td colspan="6">
+                      <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>Loading movies...</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== TRENDING PAGE ========== -->
+      <section id="page-trending" class="page-section fade-in">
+        <div class="charts-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">local_fire_department</span>
+                Trending Movies
+              </div>
+              <span class="badge badge-orange">Last 7 days</span>
+            </div>
+            <div class="card-body no-padding">
+              <ul class="movie-rank-list" id="trending-list">
+                <li class="movie-rank-item">
+                  <div class="loading-spinner" style="width:100%;padding:40px">
+                    <div class="spinner"></div>
+                    <span>Loading trending...</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="material-icons-round">emoji_events</span>
+                All Time Most Watched
+              </div>
+              <span class="badge badge-purple">All time</span>
+            </div>
+            <div class="card-body no-padding">
+              <ul class="movie-rank-list" id="most-watched-list">
+                <li class="movie-rank-item">
+                  <div class="loading-spinner" style="width:100%;padding:40px">
+                    <div class="spinner"></div>
+                    <span>Loading rankings...</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">show_chart</span>
+              Trending Score Distribution
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="chart-trending-scores"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SESSIONS PAGE ========== -->
+      <section id="page-sessions" class="page-section fade-in">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">history</span>
+              Recent Sessions
+            </div>
+            <span class="badge badge-blue" id="session-count-badge">0 sessions</span>
+          </div>
+          <div class="card-body no-padding">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Movie</th>
+                    <th>User</th>
+                    <th>Device</th>
+                    <th>Duration</th>
+                    <th>Watch %</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody id="sessions-table-body">
+                  <tr>
+                    <td colspan="7">
+                      <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>Loading sessions...</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SECURITY PAGE ========== -->
+      <section id="page-security" class="page-section fade-in">
+        <div class="security-grid">
+          <div class="security-card">
+            <h3>
+              <span class="material-icons-round" style="color:var(--accent-green)">verified_user</span>
+              Authentication
+            </h3>
+            <div class="security-stat">
+              <span class="security-stat-label">Auth State</span>
+              <span class="security-stat-value" id="sec-auth-state" style="color:var(--accent-green)">Active</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">User ID</span>
+              <span class="security-stat-value" id="sec-user-id">-</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Email Verified</span>
+              <span class="security-stat-value" id="sec-email-verified">-</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Last Sign In</span>
+              <span class="security-stat-value" id="sec-last-signin">-</span>
+            </div>
+          </div>
+          
+          <div class="security-card">
+            <h3>
+              <span class="material-icons-round" style="color:var(--accent-orange)">warning</span>
+              Fraud Detection
+            </h3>
+            <div class="security-stat">
+              <span class="security-stat-label">Suspicious Sessions (24h)</span>
+              <span class="security-stat-value" id="sec-suspicious" style="color:var(--accent-orange)">0</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Flagged Users</span>
+              <span class="security-stat-value" id="sec-flagged">0</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Rate Limit Hits (24h)</span>
+              <span class="security-stat-value" id="sec-rate-limits">0</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Invalid Submissions Blocked</span>
+              <span class="security-stat-value" id="sec-blocked" style="color:#ef4444">0</span>
+            </div>
+          </div>
+          
+          <div class="security-card">
+            <h3>
+              <span class="material-icons-round" style="color:var(--accent-blue)">speed</span>
+              Rate Limiting
+            </h3>
+            <div class="security-stat">
+              <span class="security-stat-label">Session Start Limit</span>
+              <span class="security-stat-value">10/min</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Update Frequency</span>
+              <span class="security-stat-value">3s min</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Max Session Duration</span>
+              <span class="security-stat-value">12 hours</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Position Drift Tolerance</span>
+              <span class="security-stat-value">±30s</span>
+            </div>
+          </div>
+          
+          <div class="security-card">
+            <h3>
+              <span class="material-icons-round" style="color:var(--accent-purple)">gpp_good</span>
+              Anti-Fraud Rules
+            </h3>
+            <div class="security-stat">
+              <span class="security-stat-label">Duplicate Session Check</span>
+              <span class="security-stat-value" style="color:var(--accent-green)">Enabled</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Duration Validation</span>
+              <span class="security-stat-value" style="color:var(--accent-green)">Enabled</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Position Sanity Check</span>
+              <span class="security-stat-value" style="color:var(--accent-green)">Enabled</span>
+            </div>
+            <div class="security-stat">
+              <span class="security-stat-label">Rapid Session Detection</span>
+              <span class="security-stat-value" style="color:var(--accent-green)">Enabled</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card" style="margin-top:24px">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">report</span>
+              Suspicious Activity Log
+            </div>
+          </div>
+          <div class="card-body no-padding">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Movie</th>
+                    <th>Issue</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody id="suspicious-table-body">
+                  <tr>
+                    <td colspan="5">
+                      <div class="empty-state">
+                        <span class="material-icons-round">shield</span>
+                        <p>No suspicious activity detected</p>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SETTINGS PAGE ========== -->
+      <section id="page-settings" class="page-section fade-in">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="material-icons-round">tune</span>
+              Dashboard Settings
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Auto Refresh</h4>
+                <p>Automatically refresh data every 10 seconds</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="setting-auto-refresh" checked onchange="toggleAutoRefresh()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Real-Time Updates</h4>
+                <p>Use Firebase listeners for live data instead of polling</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="setting-realtime" checked onchange="toggleRealtime()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Chart Animations</h4>
+                <p>Animate chart updates (may impact performance with many viewers)</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="setting-animations" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Sound Alerts</h4>
+                <p>Play sound when viewer count changes significantly</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="setting-sound">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Refresh Interval</h4>
+                <p>Time between background refreshes</p>
+              </div>
+              <select class="form-input" style="width:120px" id="setting-interval" onchange="updateRefreshInterval()">
+                <option value="5000">5 seconds</option>
+                <option value="10000" selected>10 seconds</option>
+                <option value="30000">30 seconds</option>
+                <option value="60000">60 seconds</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============================================= 
+     JAVASCRIPT 
+     ============================================= -->
+<script>
+/* =============================================
+   FIREBASE CONFIGURATION
+   REPLACE WITH YOUR ACTUAL CONFIG
+   ============================================= */
+var firebaseConfig = {
+ apiKey: "AIzaSyCvrWHOHXmVmHkl451aQA6XFCWy7xA9jFw",
+  authDomain: "xstream-9f21e.firebaseapp.com",
+  projectId: "xstream-9f21e",
+  storageBucket: "xstream-9f21e.firebasestorage.app",
+  messagingSenderId: "179015046758",
+  appId: "1:179015046758:web:e7da8143826b59b49e7fa7"
+};
+
+/* =============================================
+   ADMIN CONFIGURATION
+   ============================================= */
+var ADMIN_CONFIG = {
+  // List of admin UIDs who can access the dashboard
+  adminUids: [
+    "ADMIN_UID_HERE"  // Replace with actual admin UID
+  ],
+  // Or use email-based admin check
+  adminEmails: [
+    "markmellon39@gmail.com",
+    "your-email@domain.com"
+  ],
+  refreshInterval: 10000,  // 10 seconds
+  maxLivePoints: 60,       // 60 data points on live chart
+  maxSessionsLoad: 100,    // Max sessions to display
+  suspiciousThreshold: {
+    maxSessionsPerHour: 20,      // More than 20 sessions/hour = suspicious
+    maxDurationMultiplier: 1.5,  // Watch time > 1.5x movie duration = suspicious
+    minUpdateInterval: 1000,     // Updates faster than 1s = suspicious
+    positionJumpThreshold: 300   // Position jumps > 5 min = suspicious
+  }
+};
+
+/* =============================================
+   GLOBAL STATE
+   ============================================= */
+var database = null;
+var auth = null;
+var currentUser = null;
+
+var State = {
+  currentPage: 'dashboard',
+  autoRefresh: true,
+  realtimeEnabled: true,
+  refreshInterval: 10000,
+  refreshTimer: null,
+  refreshCountdown: 10,
+  countdownTimer: null,
+  
+  // Cached data
+  cache: {
+    dashboard: null,
+    movies: {},
+    trending: [],
+    mostWatched: [],
+    sessions: [],
+    activeViewers: {},
+    currentlyWatching: {},
+    lastUpdate: 0
+  },
+  
+  // Live chart data
+  liveData: {
+    viewers: [],
+    timestamps: [],
+    peakViewers: 0
+  },
+  
+  // Charts
+  charts: {},
+  
+  // Listeners
+  listeners: [],
+  
+  // Security
+  security: {
+    suspiciousSessions: [],
+    flaggedUsers: new Set(),
+    rateLimitHits: 0,
+    blockedSubmissions: 0
+  },
+  
+  // Device stats
+  devices: { desktop: 0, mobile: 0, tablet: 0 },
+  countries: {}
+};
+
+/* =============================================
+   INITIALIZATION
+   ============================================= */
+function initApp() {
+  try {
+    if (typeof firebase === 'undefined') {
+      showAuthError('Firebase SDK not loaded. Please check your internet connection.');
+      return;
+    }
+    
+    if (!firebase.apps || firebase.apps.length === 0) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    
+    database = firebase.database();
+    auth = firebase.auth();
+    
+    // Check auth state
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        // Verify admin access
+        if (isAdmin(user)) {
+          currentUser = user;
+          showDashboard();
+        } else {
+          showAuthError('Access denied. You are not an admin.');
+          auth.signOut();
+        }
+      } else {
+        showAuthScreen();
+      }
+    });
+    
+  } catch (error) {
+    console.error('Init error:', error);
+    showAuthError('Failed to initialize: ' + error.message);
+  }
+}
+
+function isAdmin(user) {
+  if (!user) return false;
+  
+  // Check UID
+  if (ADMIN_CONFIG.adminUids.indexOf(user.uid) !== -1) return true;
+  
+  // Check email
+  if (user.email && ADMIN_CONFIG.adminEmails.indexOf(user.email) !== -1) return true;
+  
+  // Check custom claims (if using Firebase Admin SDK)
+  // This would require an extra check via token
+  return false;
+}
+
+/* =============================================
+   AUTHENTICATION
+   ============================================= */
+function handleLogin() {
+  var email = document.getElementById('auth-email').value.trim();
+  var password = document.getElementById('auth-password').value;
+  var submitBtn = document.getElementById('auth-submit');
+  
+  if (!email || !password) {
+    showAuthError('Please enter email and password');
+    return;
+  }
+  
+  // Basic email validation
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthError('Please enter a valid email address');
+    return;
+  }
+  
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0"></div> Signing in...';
+  
+  auth.signInWithEmailAndPassword(email, password)
+    .then(function(result) {
+      if (!isAdmin(result.user)) {
+        auth.signOut();
+        showAuthError('Access denied. Admin privileges required.');
+      }
+    })
+    .catch(function(error) {
+      var msg = 'Login failed';
+      switch (error.code) {
+        case 'auth/user-not-found': msg = 'User not found'; break;
+        case 'auth/wrong-password': msg = 'Incorrect password'; break;
+        case 'auth/too-many-requests': msg = 'Too many attempts. Try again later.'; break;
+        case 'auth/invalid-email': msg = 'Invalid email format'; break;
+        default: msg = error.message;
+      }
+      showAuthError(msg);
+    })
+    .finally(function() {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span class="material-icons-round" style="font-size:20px">login</span> Sign In';
+    });
+}
+
+function handleLogout() {
+  // Detach all listeners
+  detachListeners();
+  clearAllTimers();
+  
+  auth.signOut().then(function() {
+    currentUser = null;
+    showAuthScreen();
+    showToast('Signed out successfully', 'info');
+  });
+}
+
+function showAuthError(message) {
+  var el = document.getElementById('auth-error');
+  el.textContent = message;
+  el.classList.add('show');
+}
+
+function showAuthScreen() {
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('app-layout').style.display = 'none';
+  document.getElementById('auth-error').classList.remove('show');
+}
+
+function showDashboard() {
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('app-layout').style.display = 'flex';
+  
+  // Update user info
+  var user = currentUser;
+  document.getElementById('user-name').textContent = user.displayName || user.email;
+  document.getElementById('user-avatar').textContent = (user.displayName || user.email || 'A')[0].toUpperCase();
+  
+  // Update security page
+  document.getElementById('sec-auth-state').textContent = 'Active';
+  document.getElementById('sec-auth-state').style.color = 'var(--accent-green)';
+  document.getElementById('sec-user-id').textContent = user.uid.substring(0, 12) + '...';
+  document.getElementById('sec-email-verified').textContent = user.emailVerified ? 'Yes' : 'No';
+  document.getElementById('sec-email-verified').style.color = user.emailVerified ? 'var(--accent-green)' : 'var(--accent-orange)';
+  document.getElementById('sec-last-signin').textContent = formatTimestamp(user.metadata.lastSignInTime);
+  
+  // Initialize dashboard
+  initCharts();
+  attachListeners();
+  startRefreshCycle();
+  
+  showToast('Welcome back, ' + (user.displayName || 'Admin'), 'success');
+}
+
+/* =============================================
+   PAGE NAVIGATION
+   ============================================= */
+function switchPage(page) {
+  State.currentPage = page;
+  
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(function(item) {
+    item.classList.toggle('active', item.dataset.page === page);
+  });
+  
+  // Update sections
+  document.querySelectorAll('.page-section').forEach(function(section) {
+    section.classList.remove('active');
+  });
+  var targetSection = document.getElementById('page-' + page);
+  if (targetSection) {
+    targetSection.classList.add('active');
+  }
+  
+  // Update title
+  var titles = {
+    dashboard: 'Dashboard',
+    realtime: 'Real-Time',
+    movies: 'Movie Analytics',
+    trending: 'Trending',
+    sessions: 'Sessions',
+    security: 'Security',
+    settings: 'Settings'
+  };
+  document.getElementById('page-title').textContent = titles[page] || 'Dashboard';
+  
+  // Close mobile sidebar
+  closeSidebar();
+  
+  // Load page-specific data
+  switch (page) {
+    case 'movies': loadMoviesPage(); break;
+    case 'trending': loadTrendingPage(); break;
+    case 'sessions': loadSessionsPage(); break;
+    case 'security': analyzeSecurity(); break;
+  }
+}
+
+function toggleSidebar() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebar-overlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('show');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
+/* =============================================
+   FIREBASE LISTENERS (Real-Time)
+   ============================================= */
+function attachListeners() {
+  if (!State.realtimeEnabled) return;
+  
+  // Active viewers listener
+  var viewersRef = database.ref('watchtime/activeViewers');
+  var viewersListener = viewersRef.on('value', function(snap) {
+    var data = snap.val() || {};
+    State.cache.activeViewers = data;
+    
+    var count = Object.keys(data).length;
+    updateStatValue('activeViewers', count);
+    document.getElementById('live-badge').textContent = count;
+    document.getElementById('rt-live-count').textContent = count;
+    
+    // Update live chart
+    State.liveData.viewers.push(count);
+    State.liveData.timestamps.push(Date.now());
+    if (State.liveData.viewers.length > ADMIN_CONFIG.maxLivePoints) {
+      State.liveData.viewers.shift();
+      State.liveData.timestamps.shift();
+    }
+    if (count > State.liveData.peakViewers) {
+      State.liveData.peakViewers = count;
+      document.getElementById('rt-peak').textContent = count;
+    }
+    
+    // Update live viewers list if on that page
+    if (State.currentPage === 'realtime') {
+      updateLiveViewersList(data);
+      updateLiveChart();
+    }
+    
+    // Count unique movies being watched
+    var movieIds = {};
+    for (var key in data) {
+      if (data[key].movieId) movieIds[data[key].movieId] = true;
+    }
+    document.getElementById('rt-movies-count').textContent = Object.keys(movieIds).length;
+    
+    // Track device stats
+    State.devices = { desktop: 0, mobile: 0, tablet: 0 };
+    for (var k in data) {
+      var device = data[k].deviceType || 'desktop';
+      if (State.devices[device] !== undefined) State.devices[device]++;
+    }
+    
+  }, function(error) {
+    console.error('Viewers listener error:', error);
+    updateConnectionStatus(false);
+  });
+  State.listeners.push({ ref: viewersRef, event: 'value', fn: viewersListener });
+  
+  // Currently watching listener
+  var cwRef = database.ref('watchtime/currentlyWatching');
+  var cwListener = cwRef.on('value', function(snap) {
+    State.cache.currentlyWatching = snap.val() || {};
+    
+    if (State.currentPage === 'realtime') {
+      updateCurrentlyWatchingChart();
+    }
+  });
+  State.listeners.push({ ref: cwRef, event: 'value', fn: cwListener });
+  
+  // Movies stats listener
+  var moviesRef = database.ref('watchtime/movies');
+  var moviesListener = moviesRef.on('value', function(snap) {
+    State.cache.movies = snap.val() || {};
+    
+    var count = Object.keys(State.cache.movies).length;
+    updateStatValue('totalMovies', count);
+    
+    // Aggregate totals
+    var totalViews = 0;
+    var totalHours = 0;
+    for (var id in State.cache.movies) {
+      var m = State.cache.movies[id];
+      totalViews += (m.totalViews || 0);
+      totalHours += (m.watchHours || 0);
+    }
+    updateStatValue('totalViews', totalViews);
+    updateStatValue('totalWatchHours', totalHours.toFixed(1));
+    
+    // Update charts
+    updateTopMoviesChart();
+    updateDevicesChart();
+    
+    // Update country stats
+    State.countries = {};
+    for (var mid in State.cache.movies) {
+      // Countries are tracked per session, aggregate from sessions if available
+    }
+    
+  });
+  State.listeners.push({ ref: moviesRef, event: 'value', fn: moviesListener });
+  
+  // Daily stats listener
+  var dailyKey = getDateKey('daily');
+  var dailyRef = database.ref('watchtime/daily/' + dailyKey);
+  var dailyListener = dailyRef.on('value', function(snap) {
+    var data = snap.val() || {};
+    // Could update daily-specific stats here
+  });
+  State.listeners.push({ ref: dailyRef, event: 'value', fn: dailyListener });
+  
+  updateConnectionStatus(true);
+}
+
+function detachListeners() {
+  State.listeners.forEach(function(l) {
+    try { l.ref.off(l.event, l.fn); } catch(e) {}
+  });
+  State.listeners = [];
+}
+
+/* =============================================
+   REFRESH CYCLE
+   ============================================= */
+function startRefreshCycle() {
+  clearAllTimers();
+  
+  if (!State.autoRefresh) return;
+  
+  // Countdown timer
+  State.refreshCountdown = Math.floor(State.refreshInterval / 1000);
+  updateCountdownDisplay();
+  
+  State.countdownTimer = setInterval(function() {
+    State.refreshCountdown--;
+    if (State.refreshCountdown <= 0) {
+      State.refreshCountdown = Math.floor(State.refreshInterval / 1000);
+      performRefresh();
+    }
+    updateCountdownDisplay();
+  }, 1000);
+  
+  // Initial load
+  performRefresh();
+}
+
+function clearAllTimers() {
+  if (State.refreshTimer) { clearTimeout(State.refreshTimer); State.refreshTimer = null; }
+  if (State.countdownTimer) { clearInterval(State.countdownTimer); State.countdownTimer = null; }
+}
+
+function performRefresh() {
+  if (State.realtimeEnabled) {
+    // Real-time listeners handle most updates
+    // Just refresh the charts and pages that need polling
+    refreshDashboardCharts();
+  } else {
+    // Full poll
+    loadDashboardData();
+  }
+  
+  // Refresh current page data
+  switch (State.currentPage) {
+    case 'dashboard': refreshDashboardCharts(); break;
+    case 'movies': loadMoviesPage(); break;
+    case 'trending': loadTrendingPage(); break;
+    case 'sessions': loadSessionsPage(); break;
+    case 'security': analyzeSecurity(); break;
+  }
+}
+
+function updateCountdownDisplay() {
+  document.getElementById('refresh-timer').textContent = State.refreshCountdown + 's';
+}
+
+function updateConnectionStatus(connected) {
+  var dot = document.getElementById('connection-dot');
+  var text = document.getElementById('connection-status');
+  if (connected) {
+    dot.classList.remove('error');
+    text.textContent = 'Connected';
+  } else {
+    dot.classList.add('error');
+    text.textContent = 'Disconnected';
+  }
+}
+
+/* =============================================
+   DATA LOADING
+   ============================================= */
+function loadDashboardData() {
+  // Load weekly data for chart
+  loadWeeklyHoursData();
+  
+  // Load comparison data
+  loadComparisonData();
+}
+
+function refreshDashboardCharts() {
+  loadWeeklyHoursData();
+  loadComparisonData();
+  updateDevicesChart();
+  updateTopMoviesChart();
+}
+
+function loadWeeklyHoursData() {
+  var chart = State.charts.weeklyHours;
+  if (!chart) return;
+  
+  var promises = [];
+  var labels = [];
+  var now = new Date();
+  
+  for (var i = 6; i >= 0; i--) {
+    var d = new Date(now);
+    d.setDate(d.getDate() - i);
+    var key = formatDateKey(d);
+    labels.push(d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }));
+    promises.push(
+      database.ref('watchtime/daily/' + key + '/totalWatchHours').once('value')
+    );
+  }
+  
+  Promise.all(promises).then(function(snaps) {
+    var data = snaps.map(function(s) { return s.val() || 0; });
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.update('none');
+  }).catch(function(err) {
+    console.error('Weekly hours error:', err);
+  });
+}
+
+function loadComparisonData() {
+  var chart = State.charts.comparison;
+  if (!chart) return;
+  
+  var dailyKey = getDateKey('daily');
+  var weekKey = getDateKey('weekly');
+  var monthKey = getDateKey('monthly');
+  
+  Promise.all([
+    database.ref('watchtime/daily/' + dailyKey).once('value'),
+    database.ref('watchtime/weekly/' + weekKey).once('value'),
+    database.ref('watchtime/monthly/' + monthKey).once('value')
+  ]).then(function(snaps) {
+    var daily = snaps[0].val() || {};
+    var weekly = snaps[1].val() || {};
+    var monthly = snaps[2].val() || {};
+    
+    chart.data.datasets[0].data = [
+      (daily.totalWatchHours || 0).toFixed(2),
+      (weekly.totalWatchHours || 0).toFixed(2),
+      (monthly.totalWatchHours || 0).toFixed(2)
+    ];
+    chart.data.datasets[1].data = [
+      daily.totalViews || 0,
+      weekly.totalViews || 0,
+      monthly.totalViews || 0
+    ];
+    chart.update('none');
+  });
+}
+
+function loadMoviesPage() {
+  var tbody = document.getElementById('movies-table-body');
+  var movies = State.cache.movies;
+  var searchTerm = (document.getElementById('movie-search')?.value || '').toLowerCase();
+  
+  if (Object.keys(movies).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="material-icons-round">movie_filter</span><p>No movies found</p></div></td></tr>';
+    return;
+  }
+  
+  var rows = [];
+  for (var id in movies) {
+    var m = movies[id];
+    if (searchTerm && (m.title || '').toLowerCase().indexOf(searchTerm) === -1) continue;
+    rows.push({
+      id: id,
+      title: m.title || 'Untitled',
+      views: m.totalViews || 0,
+      hours: (m.watchHours || 0).toFixed(2),
+      uniqueViewers: m.uniqueViewerCount || 0,
+      completionRate: m.completionRate || 0,
+      lastWatched: m.lastWatched
+    });
+  }
+  
+  // Sort by views
+  rows.sort(function(a, b) { return b.views - a.views; });
+  
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><span class="material-icons-round">search_off</span><p>No results found</p></div></td></tr>';
+    return;
+  }
+  
+  var html = '';
+  rows.forEach(function(r) {
+    var rateColor = r.completionRate >= 70 ? 'var(--accent-green)' : r.completionRate >= 40 ? 'var(--accent-orange)' : '#ef4444';
+    html += '<tr>' +
+      '<td class="title-cell">' + escapeHtml(r.title) + '</td>' +
+      '<td>' + formatNumber(r.views) + '</td>' +
+      '<td>' + r.hours + 'h</td>' +
+      '<td>' + formatNumber(r.uniqueViewers) + '</td>' +
+      '<td><span style="color:' + rateColor + ';font-weight:600">' + r.completionRate + '%</span></td>' +
+      '<td>' + (r.lastWatched ? formatTimestamp(r.lastWatched) : '-') + '</td>' +
+      '</tr>';
+  });
+  
+  tbody.innerHTML = html;
+}
+
+function filterMovies() {
+  loadMoviesPage();
+}
+
+function loadTrendingPage() {
+  // Load trending
+  database.ref('watchtime/trending')
+    .orderByChild('lastActivity')
+    .startAt(Date.now() - 7 * 86400000)
+    .once('value')
+    .then(function(snap) {
+      var data = snap.val() || {};
+      var items = [];
+      for (var id in data) {
+        var d = data[id];
+        if (!d.lastActivity || d.lastActivity < Date.now() - 7 * 86400000) continue;
+        var ageHours = (Date.now() - d.lastActivity) / 3600000;
+        var decay = Math.max(0.1, 1 - (ageHours / (7 * 24)));
+        d.score = ((d.recentViews || 0) * 1) + ((d.recentWatchHours || 0) * 5) * decay;
+        d.movieId = id;
+        items.push(d);
+      }
+      items.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+      
+      renderRankList('trending-list', items, 'score', 'Trending Score');
+      updateTrendingScoresChart(items);
+    });
+  
+  // Load most watched
+  database.ref('watchtime/mostWatched')
+    .orderByChild('totalWatchHours')
+    .limitToLast(10)
+    .once('value')
+    .then(function(snap) {
+      var data = snap.val() || {};
+      var items = [];
+      for (var id in data) {
+        var d = data[id];
+        d.movieId = id;
+        items.push(d);
+      }
+      items.sort(function(a, b) { return (b.totalWatchHours || 0) - (a.totalWatchHours || 0); });
+      
+      renderRankList('most-watched-list', items, 'totalWatchHours', 'Watch Hours');
+    });
+}
+
+function renderRankList(containerId, items, valueField, valueLabel) {
+  var container = document.getElementById(containerId);
+  
+  if (items.length === 0) {
+    container.innerHTML = '<li class="movie-rank-item"><div class="empty-state" style="width:100%"><span class="material-icons-round">trending_down</span><p>No data available</p></div></li>';
+    return;
+  }
+  
+  var html = '';
+  items.slice(0, 10).forEach(function(item, i) {
+    var rankClass = i === 0 ? 'top-1' : i === 1 ? 'top-2' : i === 2 ? 'top-3' : '';
+    var value = valueField === 'score' ? (item.score || 0).toFixed(1) : (item[valueField] || 0).toFixed(2);
+    
+    html += '<li class="movie-rank-item">' +
+      '<div class="rank-number ' + rankClass + '">' + (i + 1) + '</div>' +
+      '<div class="rank-info">' +
+        '<div class="rank-title">' + escapeHtml(item.title || 'Untitled') + '</div>' +
+        '<div class="rank-stats">' +
+          '<span>' + formatNumber(item.recentViews || item.totalViews || 0) + ' views</span>' +
+          '<span>' + (item.recentWatchHours || item.totalWatchHours || 0).toFixed(2) + 'h watched</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="rank-value">' +
+        '<span class="number">' + value + '</span>' +
+        '<span class="label">' + valueLabel + '</span>' +
+      '</div>' +
+    '</li>';
+  });
+  
+  container.innerHTML = html;
+}
+
+function loadSessionsPage() {
+  database.ref('watchtime/sessions')
+    .orderByChild('startTime')
+    .limitToLast(ADMIN_CONFIG.maxSessionsLoad)
+    .once('value')
+    .then(function(snap) {
+      var data = snap.val() || {};
+      var sessions = [];
+      
+      for (var id in data) {
+        var s = data[id];
+        s.sessionId = id;
+        sessions.push(s);
+      }
+      
+      // Sort by start time (newest first)
+      sessions.sort(function(a, b) { return (b.startTime || 0) - (a.startTime || 0); });
+      
+      State.cache.sessions = sessions;
+      renderSessionsTable(sessions);
+      
+      // Run security analysis
+      analyzeSessionsForFraud(sessions);
+    });
+}
+
+function renderSessionsTable(sessions) {
+  var tbody = document.getElementById('sessions-table-body');
+  document.getElementById('session-count-badge').textContent = sessions.length + ' sessions';
+  
+  if (sessions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="material-icons-round">history</span><p>No sessions found</p></div></td></tr>';
+    return;
+  }
+  
+  var html = '';
+  sessions.forEach(function(s) {
+    var statusBadge = '';
+    var rowClass = State.security.flaggedUsers.has(s.userId) ? 'suspicious-row' : '';
+    
+    switch (s.status) {
+      case 'playing': statusBadge = '<span class="badge badge-green">Playing</span>'; break;
+      case 'paused': statusBadge = '<span class="badge badge-orange">Paused</span>'; break;
+      case 'completed': statusBadge = '<span class="badge badge-blue">Completed</span>'; break;
+      case 'abandoned': statusBadge = '<span class="badge badge-red">Abandoned</span>'; break;
+      default: statusBadge = '<span class="badge badge-purple">' + (s.status || 'Unknown') + '</span>';
+    }
+    
+    var deviceIcon = s.deviceType === 'mobile' ? 'phone_iphone' : s.deviceType === 'tablet' ? 'tablet' : 'computer';
+    
+    html += '<tr class="' + rowClass + '">' +
+      '<td class="title-cell">' + escapeHtml(s.movieTitle || 'Unknown') + '</td>' +
+      '<td><span title="' + escapeHtml(s.userId || '') + '">' + (s.userId || 'Guest').substring(0, 12) + '...</span></td>' +
+      '<td><span class="device-badge"><span class="material-icons-round" style="font-size:14px">' + deviceIcon + '</span>' + (s.deviceType || 'desktop') + '</span></td>' +
+      '<td>' + formatDuration(s.duration || 0) + '</td>' +
+      '<td>' + (s.watchPercentage || 0) + '%</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td>' + (s.startTime ? formatTimestamp(s.startTime) : '-') + '</td>' +
+      '</tr>';
+  });
+  
+  tbody.innerHTML = html;
+}
+
+/* =============================================
+   SECURITY ANALYSIS
+   ============================================= */
+function analyzeSecurity() {
+  // Update security stats display
+  document.getElementById('sec-suspicious').textContent = State.security.suspiciousSessions.length;
+  document.getElementById('sec-flagged').textContent = State.security.flaggedUsers.size;
+  document.getElementById('sec-rate-limits').textContent = State.security.rateLimitHits;
+  document.getElementById('sec-blocked').textContent = State.security.blockedSubmissions;
+  
+  renderSuspiciousTable();
+}
+
+function analyzeSessionsForFraud(sessions) {
+  var suspicious = [];
+  var userSessionCounts = {};
+  var now = Date.now();
+  var oneHourAgo = now - 3600000;
+  
+  sessions.forEach(function(s) {
+    var issues = [];
+    
+    // Check for rapid session creation
+    if (!userSessionCounts[s.userId]) userSessionCounts[s.userId] = [];
+    userSessionCounts[s.userId].push(s.startTime);
+    
+    var recentSessions = userSessionCounts[s.userId].filter(function(t) { return t > oneHourAgo; });
+    if (recentSessions.length > ADMIN_CONFIG.suspiciousThreshold.maxSessionsPerHour) {
+      issues.push('Rapid sessions: ' + recentSessions.length + '/hour');
+    }
+    
+    // Check for impossible watch duration
+    if (s.duration && s.movieDuration && s.duration > s.movieDuration * ADMIN_CONFIG.suspiciousThreshold.maxDurationMultiplier) {
+      issues.push('Duration exceeds movie length by ' + Math.round((s.duration / s.movieDuration - 1) * 100) + '%');
+    }
+    
+    // Check for suspiciously short sessions (spam)
+    if (s.duration && s.duration < 2 && s.status === 'abandoned') {
+      issues.push('Very short session (' + s.duration + 's)');
+    }
+    
+    // Check for 100% completion in suspiciously short time
+    if (s.watchPercentage >= 100 && s.duration && s.movieDuration && s.duration < s.movieDuration * 0.8) {
+      issues.push('100% completion in ' + Math.round(s.duration) + 's (movie: ' + Math.round(s.movieDuration) + 's)');
+    }
+    
+    if (issues.length > 0) {
+      suspicious.push({
+        session: s,
+        issues: issues
+      });
+      State.security.flaggedUsers.add(s.userId);
+    }
+  });
+  
+  State.security.suspiciousSessions = suspicious;
+  
+  if (State.currentPage === 'security') {
+    analyzeSecurity();
+  }
+}
+
+function renderSuspiciousTable() {
+  var tbody = document.getElementById('suspicious-table-body');
+  var items = State.security.suspiciousSessions;
+  
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><span class="material-icons-round">shield</span><p>No suspicious activity detected</p></div></td></tr>';
+    return;
+  }
+  
+  var html = '';
+  items.slice(0, 50).forEach(function(item) {
+    var s = item.session;
+    html += '<tr class="suspicious-row">' +
+      '<td>' + (s.startTime ? formatTimestamp(s.startTime) : '-') + '</td>' +
+      '<td>' + (s.userId || 'Unknown').substring(0, 16) + '</td>' +
+      '<td>' + escapeHtml(s.movieTitle || 'Unknown') + '</td>' +
+      '<td><span class="badge badge-red">' + item.issues.length + ' issue' + (item.issues.length > 1 ? 's' : '') + '</span></td>' +
+      '<td style="font-size:0.8rem;color:var(--text-secondary)">' + item.issues.join('; ') + '</td>' +
+      '</tr>';
+  });
+  
+  tbody.innerHTML = html;
+}
+
+/* =============================================
+   LIVE UPDATES
+   ============================================= */
+function updateLiveViewersList(viewers) {
+  var container = document.getElementById('live-viewers-list');
+  var keys = Object.keys(viewers);
+  
+  document.getElementById('viewer-count-badge').textContent = keys.length + ' viewers';
+  
+  if (keys.length === 0) {
+    container.innerHTML = '<div class="empty-state"><span class="material-icons-round">visibility_off</span><p>No active viewers</p></div>';
+    return;
+  }
+  
+  // Sort by last heartbeat (most recent first)
+  keys.sort(function(a, b) { return (viewers[b].lastHeartbeat || 0) - (viewers[a].lastHeartbeat || 0); });
+  
+  var html = '';
+  keys.slice(0, 100).forEach(function(key) {
+    var v = viewers[key];
+    var deviceIcon = v.deviceType === 'mobile' ? 'phone_iphone' : v.deviceType === 'tablet' ? 'tablet' : 'computer';
+    var timeAgo = v.lastHeartbeat ? getTimeAgo(v.lastHeartbeat) : 'Unknown';
+    
+    html += '<div class="viewer-item">' +
+      '<div class="viewer-dot"></div>' +
+      '<div class="viewer-info">' +
+        '<div class="viewer-movie">' + escapeHtml(v.movieTitle || 'Unknown') + '</div>' +
+        '<div class="viewer-meta">' +
+          '<span class="device-badge"><span class="material-icons-round" style="font-size:12px">' + deviceIcon + '</span>' + (v.deviceType || 'desktop') + '</span>' +
+          '<span>' + (v.country || 'Unknown') + '</span>' +
+          '<span>' + timeAgo + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="viewer-position">' + formatDuration(v.position || 0) + '</div>' +
+    '</div>';
+  });
+  
+  container.innerHTML = html;
+}
+
+function updateLiveChart() {
+  var chart = State.charts.liveViewers;
+  if (!chart) return;
+  
+  var labels = State.liveData.timestamps.map(function(t) {
+    return new Date(t).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  });
+  
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = State.liveData.viewers;
+  chart.update('none');
+}
+
+function updateCurrentlyWatchingChart() {
+  var chart = State.charts.currentlyWatching;
+  if (!chart) return;
+  
+  var data = State.cache.currentlyWatching;
+  var labels = [];
+  var values = [];
+  var colors = [];
+  
+  var colorPalette = [
+    '#e50914', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
+    '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#a855f7'
+  ];
+  
+  var items = [];
+  for (var id in data) {
+    items.push({ id: id, title: data[id].title || 'Unknown', viewers: data[id].viewerCount || 0 });
+  }
+  items.sort(function(a, b) { return b.viewers - a.viewers; });
+  
+  items.slice(0, 8).forEach(function(item, i) {
+    labels.push(item.title.length > 20 ? item.title.substring(0, 20) + '...' : item.title);
+    values.push(item.viewers);
+    colors.push(colorPalette[i % colorPalette.length]);
+  });
+  
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = values;
+  chart.data.datasets[0].backgroundColor = colors;
+  chart.update('none');
+}
+
+/* =============================================
+   CHARTS
+   ============================================= */
+function initCharts() {
+  // Common chart options
+  var darkOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: '#a0a0b5',
+          font: { family: 'Inter', size: 12 },
+          padding: 16,
+          usePointStyle: true,
+          pointStyleWidth: 10
+        }
+      },
+      tooltip: {
+        backgroundColor: '#1a1a25',
+        titleColor: '#ffffff',
+        bodyColor: '#a0a0b5',
+        borderColor: '#2a2a3a',
+        borderWidth: 1,
+        padding: 12,
+        titleFont: { family: 'Inter', weight: '600' },
+        bodyFont: { family: 'Inter' },
+        cornerRadius: 8
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#6a6a80', font: { family: 'Inter', size: 11 } },
+        grid: { color: 'rgba(42, 42, 58, 0.5)', drawBorder: false }
+      },
+      y: {
+        ticks: { color: '#6a6a80', font: { family: 'Inter', size: 11 } },
+        grid: { color: 'rgba(42, 42, 58, 0.5)', drawBorder: false }
+      }
+    }
+  };
+  
+  // Weekly Hours Line Chart
+  State.charts.weeklyHours = new Chart(document.getElementById('chart-weekly-hours'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Watch Hours',
+        data: [],
+        borderColor: '#e50914',
+        backgroundColor: 'rgba(229, 9, 20, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#e50914',
+        pointBorderColor: '#e50914',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: JSON.parse(JSON.stringify(darkOptions))
+  });
+  
+  // Devices Doughnut Chart
+  State.charts.devices = new Chart(document.getElementById('chart-devices'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Desktop', 'Mobile', 'Tablet'],
+      datasets: [{
+        data: [0, 0, 0],
+        backgroundColor: ['#3b82f6', '#e50914', '#f59e0b'],
+        borderColor: '#16161f',
+        borderWidth: 3,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#a0a0b5',
+            font: { family: 'Inter', size: 12 },
+            padding: 20,
+            usePointStyle: true
+          }
+        },
+        tooltip: darkOptions.plugins.tooltip
+      }
+    }
+  });
+  
+  // Top Movies Bar Chart
+  State.charts.topMovies = new Chart(document.getElementById('chart-top-movies'), {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Watch Hours',
+        data: [],
+        backgroundColor: 'rgba(229, 9, 20, 0.8)',
+        borderColor: '#e50914',
+        borderWidth: 1,
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      ...JSON.parse(JSON.stringify(darkOptions)),
+      indexAxis: 'y',
+      plugins: {
+        ...JSON.parse(JSON.stringify(darkOptions.plugins)),
+        legend: { display: false }
+      }
+    }
+  });
+  
+  // Countries Horizontal Bar
+  State.charts.countries = new Chart(document.getElementById('chart-countries'), {
+    type: 'bar',
+    data: {
+      labels: ['US', 'UK', 'CA', 'AU', 'DE', 'FR', 'IN', 'BR', 'JP', 'NG'],
+      datasets: [{
+        label: 'Views',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        backgroundColor: [
+          'rgba(229, 9, 20, 0.8)', 'rgba(59, 130, 246, 0.8)', 'rgba(16, 185, 129, 0.8)',
+          'rgba(245, 158, 11, 0.8)', 'rgba(139, 92, 246, 0.8)', 'rgba(236, 72, 153, 0.8)',
+          'rgba(6, 182, 212, 0.8)', 'rgba(249, 115, 22, 0.8)', 'rgba(20, 184, 166, 0.8)',
+          'rgba(168, 85, 247, 0.8)'
+        ],
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      ...JSON.parse(JSON.stringify(darkOptions)),
+      indexAxis: 'y',
+      plugins: {
+        ...JSON.parse(JSON.stringify(darkOptions.plugins)),
+        legend: { display: false }
+      }
+    }
+  });
+  
+  // Period Comparison
+  State.charts.comparison = new Chart(document.getElementById('chart-comparison'), {
+    type: 'bar',
+    data: {
+      labels: ['Today', 'This Week', 'This Month'],
+      datasets: [
+        {
+          label: 'Watch Hours',
+          data: [0, 0, 0],
+          backgroundColor: 'rgba(229, 9, 20, 0.8)',
+          borderColor: '#e50914',
+          borderWidth: 1,
+          borderRadius: 6,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Views',
+          data: [0, 0, 0],
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+          borderRadius: 6,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      ...JSON.parse(JSON.stringify(darkOptions)),
+      scales: {
+        x: darkOptions.scales.x,
+        y: {
+          ...darkOptions.scales.y,
+          position: 'left',
+          title: { display: true, text: 'Hours', color: '#6a6a80', font: { family: 'Inter' } }
+        },
+        y1: {
+          ...darkOptions.scales.y,
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: 'Views', color: '#6a6a80', font: { family: 'Inter' } }
+        }
+      }
+    }
+  });
+  
+  // Live Viewers Line Chart
+  State.charts.liveViewers = new Chart(document.getElementById('chart-live-viewers'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Viewers',
+        data: [],
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4
+      }]
+    },
+    options: {
+      ...JSON.parse(JSON.stringify(darkOptions)),
+      animation: { duration: 0 },
+      scales: {
+        x: {
+          ...darkOptions.scales.x,
+          ticks: { ...darkOptions.scales.x.ticks, maxTicksLimit: 10 }
+        },
+        y: {
+          ...darkOptions.scales.y,
+          beginAtZero: true,
+          suggestedMax: 10
+        }
+      }
+    }
+  });
+  
+  // Currently Watching Doughnut
+  State.charts.currentlyWatching = new Chart(document.getElementById('chart-currently-watching'), {
+    type: 'doughnut',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        backgroundColor: [],
+        borderColor: '#16161f',
+        borderWidth: 2,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            color: '#a0a0b5',
+            font: { family: 'Inter', size: 11 },
+            padding: 12,
+            usePointStyle: true,
+            boxWidth: 8
+          }
+        },
+        tooltip: darkOptions.plugins.tooltip
+      }
+    }
+  });
+  
+  // Trending Scores Bar
+  State.charts.trendingScores = new Chart(document.getElementById('chart-trending-scores'), {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Trending Score',
+        data: [],
+        backgroundColor: 'rgba(245, 158, 11, 0.8)',
+        borderColor: '#f59e0b',
+        borderWidth: 1,
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      ...JSON.parse(JSON.stringify(darkOptions)),
+      plugins: {
+        ...JSON.parse(JSON.stringify(darkOptions.plugins)),
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+function updateDevicesChart() {
+  var chart = State.charts.devices;
+  if (!chart) return;
+  
+  chart.data.datasets[0].data = [
+    State.devices.desktop || 0,
+    State.devices.mobile || 0,
+    State.devices.tablet || 0
+  ];
+  chart.update('none');
+}
+
+function updateTopMoviesChart() {
+  var chart = State.charts.topMovies;
+  if (!chart) return;
+  
+  var movies = [];
+  for (var id in State.cache.movies) {
+    var m = State.cache.movies[id];
+    movies.push({ title: m.title || 'Untitled', hours: m.watchHours || 0 });
+  }
+  movies.sort(function(a, b) { return b.hours - a.hours; });
+  
+  var top5 = movies.slice(0, 5);
+  chart.data.labels = top5.map(function(m) {
+    return m.title.length > 25 ? m.title.substring(0, 25) + '...' : m.title;
+  });
+  chart.data.datasets[0].data = top5.map(function(m) { return m.hours.toFixed(2); });
+  chart.update('none');
+}
+
+function updateTrendingScoresChart(items) {
+  var chart = State.charts.trendingScores;
+  if (!chart) return;
+  
+  chart.data.labels = items.slice(0, 10).map(function(i) {
+    return (i.title || 'Unknown').length > 25 ? (i.title || '').substring(0, 25) + '...' : (i.title || 'Unknown');
+  });
+  chart.data.datasets[0].data = items.slice(0, 10).map(function(i) { return (i.score || 0).toFixed(1); });
+  chart.update('none');
+}
+
+/* =============================================
+   SETTINGS HANDLERS
+   ============================================= */
+function toggleAutoRefresh() {
+  State.autoRefresh = document.getElementById('setting-auto-refresh').checked;
+  if (State.autoRefresh) {
+    startRefreshCycle();
+    showToast('Auto refresh enabled', 'success');
+  } else {
+    clearAllTimers();
+    showToast('Auto refresh disabled', 'info');
+  }
+}
+
+function toggleRealtime() {
+  State.realtimeEnabled = document.getElementById('setting-realtime').checked;
+  if (State.realtimeEnabled) {
+    attachListeners();
+    showToast('Real-time updates enabled', 'success');
+  } else {
+    detachListeners();
+    showToast('Real-time updates disabled - using polling mode', 'info');
+  }
+}
+
+function updateRefreshInterval() {
+  State.refreshInterval = parseInt(document.getElementById('setting-interval').value);
+  if (State.autoRefresh) {
+    startRefreshCycle();
+  }
+  showToast('Refresh interval updated to ' + (State.refreshInterval / 1000) + 's', 'info');
+}
+
+/* =============================================
+   UTILITY FUNCTIONS
+   ============================================= */
+function updateStatValue(name, value) {
+  var el = document.querySelector('[data-count="' + name + '"]');
+  if (el) {
+    var displayValue = typeof value === 'number' ? 
+      (value >= 1000000 ? (value / 1000000).toFixed(1) + 'M' : 
+       value >= 1000 ? (value / 1000).toFixed(1) + 'K' : 
+       value) : value;
+    el.textContent = displayValue;
+  }
+}
+
+function formatNumber(num) {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toString();
+}
+
+function formatDuration(seconds) {
+  if (!seconds || seconds <= 0) return '0:00';
+  var h = Math.floor(seconds / 3600);
+  var m = Math.floor((seconds % 3600) / 60);
+  var s = Math.floor(seconds % 60);
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function formatTimestamp(ts) {
+  if (!ts) return '-';
+  var d = new Date(ts);
+  var now = new Date();
+  var diff = now - d;
+  
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+  
+  return d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ' ' + 
+         d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+}
+
+function getTimeAgo(ts) {
+  if (!ts) return 'Unknown';
+  var diff = Date.now() - ts;
+  if (diff < 5000) return 'Just now';
+  if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  return Math.floor(diff / 3600000) + 'h ago';
+}
+
+function getDateKey(period) {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = String(now.getMonth() + 1).padStart(2, '0');
+  var d = String(now.getDate()).padStart(2, '0');
+  
+  if (period === 'daily') return y + '-' + m + '-' + d;
+  
+  var jan1 = new Date(y, 0, 1);
+  var dayOfYear = Math.ceil((now - jan1) / 86400000);
+  var weekNum = Math.ceil(dayOfYear / 7);
+  
+  if (period === 'weekly') return y + '-W' + String(weekNum).padStart(2, '0');
+  if (period === 'monthly') return y + '-' + m;
+  return y + '-' + m + '-' + d;
+}
+
+function formatDateKey(date) {
+  var y = date.getFullYear();
+  var m = String(date.getMonth() + 1).padStart(2, '0');
+  var d = String(date.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function showToast(message, type) {
+  type = type || 'info';
+  var container = document.getElementById('toast-container');
+  var icons = {
+    success: 'check_circle',
+    error: 'error',
+    warning: 'warning',
+    info: 'info'
+  };
+  
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.innerHTML = '<span class="material-icons-round toast-icon">' + (icons[type] || 'info') + '</span>' +
+                    '<span class="toast-message">' + message + '</span>';
+  
+  container.appendChild(toast);
+  
+  setTimeout(function() {
+    toast.classList.add('toast-out');
+    setTimeout(function() { toast.remove(); }, 300);
+  }, 3000);
+}
+
+/* =============================================
+   KEYBOARD SHORTCUTS
+   ============================================= */
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  
+  switch(e.key) {
+    case '1': switchPage('dashboard'); break;
+    case '2': switchPage('realtime'); break;
+    case '3': switchPage('movies'); break;
+    case '4': switchPage('trending'); break;
+    case '5': switchPage('sessions'); break;
+    case '6': switchPage('security'); break;
+    case '7': switchPage('settings'); break;
+    case 'r':
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        performRefresh();
+        showToast('Data refreshed', 'success');
+      }
+      break;
+  }
+});
+
+// Enter key on login form
+document.addEventListener('keypress', function(e) {
+  if (e.key === 'Enter' && document.getElementById('auth-screen') && !document.getElementById('auth-screen').classList.contains('hidden')) {
+    handleLogin();
+  }
+});
+
+/* =============================================
+   START APP
+   ============================================= */
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
